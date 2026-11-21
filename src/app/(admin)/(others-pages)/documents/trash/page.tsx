@@ -1,4 +1,3 @@
-import PageBreadcrumb from "@/components/common/PageBreadCrumb";
 import TrashDocumentsPage from "@/components/documents/TrashDocumentsPage";
 import { Metadata } from "next";
 import React from "react";
@@ -12,7 +11,6 @@ export const metadata: Metadata = {
 export default function page() {
   return (
     <div>
-      <PageBreadcrumb pageTitle="Documents" />
       <TrashDocumentsPage />
     </div>
   );

@@ -8,43 +8,63 @@ import { ListChecks } from 'lucide-react';
 export default function TasksLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
-  // Deteksi sub-page untuk styling tab
+  // Deteksi sub-page untuk styling tab sesuai folder project MAHA
   const isMatter = pathname.includes('/metter');
   const isLawOffice = pathname.includes('/law-office');
 
   return (
-    <div className="min-h-screen bg-[#1e1e1e] text-gray-200 p-4 md:p-6">
+    <div className="min-h-screen bg-[#F5F2F2] dark:bg-[#2B2A2A] text-[#2B2A2A] dark:text-[#F5F2F2] p-4 md:p-10 transition-colors duration-500">
       <div className="max-w-7xl mx-auto">
-        <div className="flex justify-between items-center mb-2 text-white">
-          <h1 className="text-xl md:text-2xl font-semibold flex items-center gap-2">
-            <ListChecks className="text-[#4fd1c5]" size={26} /> Tasks
-          </h1>
+        {/* Header Section */}
+        <div className="flex justify-between items-center mb-8">
+          <div className="flex items-center gap-4">
+            <div className="p-3 bg-[#5A7ACD] rounded-2xl text-[#F5F2F2] shadow-lg shadow-[#5A7ACD]/20">
+              <ListChecks size={28} />
+            </div>
+            <div>
+              <h1 className="text-3xl font-black uppercase tracking-tighter leading-none">
+                Tasks & Agenda
+              </h1>
+              <p className="text-[10px] font-bold opacity-40 uppercase tracking-[0.2em] mt-1">
+                Management Kerja Kantor Hukum
+              </p>
+            </div>
+          </div>
         </div>
 
-        {/* Tab Navigation - Navigasi instan karena berada di Shared Layout */}
-        <div className="flex gap-6 border-b border-gray-800 mb-6">
+        {/* Tab Navigation - Pure Tailwind with 4 Color Palette */}
+        <div className="flex gap-8 border-b border-[#2B2A2A]/5 dark:border-[#F5F2F2]/10 mb-10 overflow-x-auto no-scrollbar">
           <Link 
             href="/tasks/metter"
-            className={`pb-3 text-sm font-medium transition-all relative ${
-              isMatter ? 'text-[#4fd1c5]' : 'text-gray-500 hover:text-gray-300'
+            className={`pb-4 text-[10px] font-black uppercase tracking-[0.2em] transition-all relative whitespace-nowrap ${
+              isMatter 
+                ? 'text-[#5A7ACD] opacity-100' 
+                : 'text-inherit opacity-30 hover:opacity-100'
             }`}
           >
             Matter Tasks
-            {isMatter && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-[#4fd1c5]" />}
+            {isMatter && (
+              <div className="absolute bottom-0 left-0 w-full h-1 bg-[#5A7ACD] rounded-t-full animate-in slide-in-from-bottom-1" />
+            )}
           </Link>
 
           <Link 
             href="/tasks/law-office"
-            className={`pb-3 text-sm font-medium transition-all relative ${
-              isLawOffice ? 'text-[#4fd1c5]' : 'text-gray-500 hover:text-gray-300'
+            className={`pb-4 text-[10px] font-black uppercase tracking-[0.2em] transition-all relative whitespace-nowrap ${
+              isLawOffice 
+                ? 'text-[#5A7ACD] opacity-100' 
+                : 'text-inherit opacity-30 hover:opacity-100'
             }`}
           >
             Personal Tasks
-            {isLawOffice && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-[#4fd1c5]" />}
+            {isLawOffice && (
+              <div className="absolute bottom-0 left-0 w-full h-1 bg-[#5A7ACD] rounded-t-full animate-in slide-in-from-bottom-1" />
+            )}
           </Link>
         </div>
 
-        <div className="animate-in fade-in duration-300">
+        {/* Content Area */}
+        <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
           {children}
         </div>
       </div>

@@ -1,4 +1,3 @@
-import PageBreadcrumb from "@/components/common/PageBreadCrumb";
 import DashboardPage from "@/components/Dashboard";
 import type { Metadata } from "next";
 
@@ -12,7 +11,6 @@ export const metadata: Metadata = {
 export default function Dashboard() {
   return (
     <div>
-      <PageBreadcrumb pageTitle="Dashboard" />
       <DashboardPage />
     </div>
   );

@@ -1,124 +1,229 @@
 "use client";
 
-import React, { useState } from 'react';
-import Link from 'next/link';
-import { 
-  Search, 
-  Trash2, 
-  ChevronLeft, 
-  Calendar, 
+import React, { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import {
+  Search,
+  Trash2,
+  ChevronLeft,
+  Calendar,
   Folder as FolderIcon,
-  RotateCcw,
-  MoreVertical
-} from 'lucide-react';
+  FileText,
+} from "lucide-react";
+import {
+  documentService,
+  DocumentItem,
+  resolveDocumentFileUrl,
+} from "@/services/documents";
+
+const formatDate = (value?: string | null) => {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  return date.toLocaleDateString("id-ID", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+};
 
 export default function TrashDocumentsPage() {
-  const [activeFilter, setActiveFilter] = useState('All');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [activeFilter, setActiveFilter] = useState("All");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [trashItems, setTrashItems] = useState<DocumentItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Data dummy untuk simulasi (kosongkan untuk melihat empty state sesuai gambar)
-  const [trashItems, setTrashItems] = useState([]);
+  useEffect(() => {
+    let isActive = true;
+    setIsLoading(true);
+    setError(null);
+
+    documentService
+      .listTrash()
+      .then((data) => {
+        if (!isActive) return;
+        setTrashItems(data);
+      })
+      .catch(() => {
+        if (!isActive) return;
+        setError("Gagal memuat trash documents.");
+      })
+      .finally(() => {
+        if (!isActive) return;
+        setIsLoading(false);
+      });
+
+    return () => {
+      isActive = false;
+    };
+  }, []);
+
+  const filteredTrash = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    return trashItems.filter((item) => {
+      const matchesFilter =
+        activeFilter === "All" ||
+        (activeFilter === "File" && item.type === "FILE") ||
+        (activeFilter === "Folder" && item.type === "FOLDER");
+
+      const searchable = [
+        item.name,
+        item.description,
+        item.contact?.name,
+        item.matter?.caseArea,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      const matchesSearch = !query || searchable.includes(query);
+
+      return matchesFilter && matchesSearch;
+    });
+  }, [activeFilter, searchQuery, trashItems]);
 
   return (
-    <div className="min-h-screen bg-[#1e1e1e] text-gray-200 p-4 md:p-6 font-sans">
+    <div className="min-h-screen bg-[#F5F2F2] dark:bg-[#2B2A2A] text-[#2B2A2A] dark:text-[#F5F2F2] p-4 md:p-10 transition-colors duration-500">
       <div className="max-w-7xl mx-auto">
-        
-        {/* --- HEADER SECTION --- */}
-        <div className="flex items-center gap-4 mb-6">
-          <Link 
-            href="/documents" 
-            className="p-2 hover:bg-gray-800 rounded-lg transition-colors text-gray-400 hover:text-[#4fd1c5]"
+        <div className="flex items-center gap-6 mb-10">
+          <Link
+            href="/documents"
+            className="p-3 bg-white dark:bg-[#333232] border border-[#2B2A2A]/5 dark:border-[#F5F2F2]/10 rounded-2xl shadow-sm text-[#2B2A2A] dark:text-[#F5F2F2] hover:bg-[#5A7ACD] hover:text-white transition-all"
           >
             <ChevronLeft size={24} />
           </Link>
-          <div className="flex items-center gap-3">
-            <div className="bg-red-500/10 p-2 rounded-lg">
-              <Trash2 className="text-red-500" size={24} />
+          <div className="flex items-center gap-4">
+            <div className="bg-[#5A7ACD]/10 p-3 rounded-2xl text-[#5A7ACD] shadow-lg shadow-[#5A7ACD]/10">
+              <Trash2 size={28} />
             </div>
-            <h1 className="text-xl md:text-2xl font-black text-white uppercase tracking-tight">
-              Trash
-            </h1>
+            <div>
+              <h1 className="text-3xl font-black uppercase tracking-tighter leading-none">
+                Trash Bin
+              </h1>
+              <p className="text-[10px] font-bold opacity-40 uppercase tracking-[0.2em] mt-1">
+                Berkas yang Dihapus Sementara
+              </p>
+            </div>
           </div>
         </div>
 
-        {/* --- FILTERS & SEARCH BAR --- */}
-        <div className="bg-[#252525] p-3 rounded-lg border border-gray-800 flex flex-wrap items-center gap-4 mb-6 shadow-sm">
-          <div className="relative flex-grow max-w-md">
-            <Search className="absolute left-3 top-2.5 text-gray-500 w-4 h-4" />
-            <input 
-              type="text" 
-              placeholder="Search document" 
+        <div className="bg-white dark:bg-[#333232] p-4 rounded-[2rem] border border-[#2B2A2A]/5 dark:border-[#F5F2F2]/10 flex flex-wrap items-center gap-6 mb-8 shadow-sm">
+          <div className="relative flex-grow max-w-md group">
+            <Search
+              className="absolute left-4 top-1/2 -translate-y-1/2 opacity-30 group-focus-within:text-[#5A7ACD] transition-colors"
+              size={18}
+            />
+            <input
+              type="text"
+              placeholder="Cari di tempat sampah..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="bg-[#1a1a1a] border border-gray-700 rounded w-full pl-10 pr-4 py-2 text-sm outline-none focus:border-[#4fd1c5] transition-all"
+              className="bg-[#F5F2F2] dark:bg-[#2B2A2A] border border-transparent rounded-2xl w-full pl-12 pr-4 py-3.5 text-sm font-bold outline-none focus:ring-4 focus:ring-[#5A7ACD]/10 transition-all"
             />
           </div>
-          
-          <div className="flex bg-[#1a1a1a] p-1 rounded-md border border-gray-800">
-            {['All', 'File', 'Folder'].map((filter) => (
+
+          <div className="flex bg-[#F5F2F2] dark:bg-[#2B2A2A] p-1.5 rounded-2xl border border-[#2B2A2A]/5">
+            {["All", "File", "Folder"].map((filter) => (
               <button
                 key={filter}
                 onClick={() => setActiveFilter(filter)}
-                className={`px-4 py-1.5 rounded text-xs font-black uppercase tracking-widest transition-all ${
-                  activeFilter === filter ? 'bg-[#2dcdc1] text-[#1a1a1a]' : 'text-gray-500 hover:text-white'
+                className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                  activeFilter === filter
+                    ? "bg-[#5A7ACD] text-white shadow-lg"
+                    : "opacity-40 hover:opacity-100"
                 }`}
               >
                 {filter}
               </button>
             ))}
           </div>
-          
-          <button className="text-gray-400 hover:text-white flex items-center gap-2 text-xs font-black uppercase tracking-tighter ml-auto transition-colors">
-             <Calendar size={14} /> Period
+
+          <button className="opacity-40 hover:opacity-100 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest ml-auto transition-colors">
+            <Calendar size={14} /> Period
           </button>
         </div>
 
-        {/* --- TABLE / CONTENT AREA --- */}
-        <div className="bg-[#252525] border border-gray-800 rounded-xl overflow-hidden shadow-inner min-h-[500px] flex flex-col">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-[#2a2a2a]/50 text-gray-400 border-b border-gray-800 uppercase font-black tracking-tighter">
+        <div className="bg-white dark:bg-[#333232] border border-[#2B2A2A]/5 dark:border-[#F5F2F2]/10 rounded-[2.5rem] shadow-sm overflow-hidden min-h-[500px] flex flex-col">
+          <table className="w-full text-left">
+            <thead className="bg-[#F5F2F2] dark:bg-[#2B2A2A] opacity-50 text-[10px] font-black uppercase tracking-widest border-b border-[#2B2A2A]/5">
               <tr>
-                <th className="px-5 py-4 w-20">Actions</th>
-                <th className="px-5 py-4 w-20">Type</th>
-                <th className="px-5 py-4">Name <span className="inline-block ml-1">↑↓</span></th>
-                <th className="px-5 py-4">Description</th>
-                <th className="px-5 py-4">Deleted Date</th>
+                <th className="px-8 py-5 w-24">Tipe</th>
+                <th className="px-8 py-5">Nama Berkas</th>
+                <th className="px-8 py-5">Contact</th>
+                <th className="px-8 py-5">Matter</th>
+                <th className="px-8 py-5">Deskripsi</th>
+                <th className="px-8 py-5 text-right">Tanggal Hapus</th>
               </tr>
             </thead>
-            <tbody>
-              {trashItems.length > 0 ? (
-                trashItems.map((item: any, index) => (
-                  <tr key={index} className="border-b border-gray-800 hover:bg-[#1a1a1a]/30 transition-colors">
-                    <td className="px-5 py-4">
-                      <button className="text-gray-500 hover:text-[#4fd1c5] transition-colors">
-                        <RotateCcw size={16} />
-                      </button>
+            <tbody className="text-sm font-bold divide-y divide-[#2B2A2A]/5 dark:divide-[#F5F2F2]/5">
+              {isLoading ? (
+                <tr>
+                  <td colSpan={6} className="px-8 py-16 text-center text-slate-400">
+                    Loading trash documents...
+                  </td>
+                </tr>
+              ) : error ? (
+                <tr>
+                  <td colSpan={6} className="px-8 py-16 text-center text-red-500">
+                    {error}
+                  </td>
+                </tr>
+              ) : filteredTrash.length > 0 ? (
+                filteredTrash.map((item) => (
+                  <tr key={item.id} className="hover:bg-[#5A7ACD]/5 transition-colors group">
+                    <td className="px-8 py-6">
+                      {item.type === "FOLDER" ? (
+                        <FolderIcon size={22} className="text-[#5A7ACD]" />
+                      ) : (
+                        <FileText size={22} className="opacity-40" />
+                      )}
                     </td>
-                    <td className="px-5 py-4">
-                      <FolderIcon size={18} className="text-gray-600" />
+                    <td className="px-8 py-6 font-black uppercase tracking-tight text-[#2B2A2A] dark:text-[#F5F2F2]">
+                      {item.type === "FILE" && resolveDocumentFileUrl(item.fileUrl) ? (
+                        <a
+                          href={resolveDocumentFileUrl(item.fileUrl) ?? undefined}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="hover:underline underline-offset-4"
+                        >
+                          {item.name}
+                        </a>
+                      ) : (
+                        item.name
+                      )}
                     </td>
-                    <td className="px-5 py-4 font-bold text-white">{item.name}</td>
-                    <td className="px-5 py-4 text-gray-500">{item.description}</td>
-                    <td className="px-5 py-4 text-gray-400">{item.deletedDate}</td>
+                    <td className="px-8 py-6 opacity-50">
+                      {item.contact?.name ?? item.contactId ?? "-"}
+                    </td>
+                    <td className="px-8 py-6 opacity-50">
+                      {item.matter?.caseArea ?? item.matterId ?? "-"}
+                    </td>
+                    <td className="px-8 py-6 opacity-40 italic font-medium">
+                      {item.description ?? "-"}
+                    </td>
+                    <td className="px-8 py-6 opacity-60 font-mono text-xs text-right">
+                      {formatDate(item.lastEdit)}
+                    </td>
                   </tr>
                 ))
               ) : (
-                /* --- EMPTY STATE (Sesuai Gambar Referensi) --- */
                 <tr>
-                  <td colSpan={5} className="py-20 text-center">
+                  <td colSpan={6} className="py-32 text-center">
                     <div className="flex flex-col items-center justify-center">
-                      <div className="relative mb-6">
-                        {/* Stacked Folders Icon Simulation */}
-                        <div className="relative bg-[#1a1a1a] p-8 rounded-2xl border border-gray-800 shadow-xl">
-                          <div className="absolute -top-4 -right-4 bg-[#2dcdc1]/20 p-2 rounded-lg border border-[#2dcdc1]/30">
-                            <FolderIcon className="text-[#2dcdc1]" size={40} />
-                          </div>
-                          <FolderIcon className="text-gray-700 opacity-20" size={80} />
+                      <div className="relative mb-8 group transition-transform hover:scale-105">
+                        <div className="bg-[#5A7ACD]/5 dark:bg-[#F5F2F2]/5 p-12 rounded-[3rem] border-2 border-dashed border-[#2B2A2A]/10 dark:border-[#F5F2F2]/10">
+                          <Trash2
+                            className="text-[#5A7ACD] opacity-20 group-hover:opacity-40 transition-opacity"
+                            size={80}
+                          />
                         </div>
                       </div>
-                      <h3 className="text-white text-xl font-black uppercase tracking-tighter mb-2">
-                        No trash found
+                      <h3 className="text-[#2B2A2A] dark:text-[#F5F2F2] text-2xl font-black uppercase tracking-tighter mb-2">
+                        Tempat Sampah Kosong
                       </h3>
+                      <p className="text-xs font-bold opacity-40 uppercase tracking-widest max-w-xs mx-auto">
+                        Tidak ada berkas yang ditemukan di folder trash.
+                      </p>
                     </div>
                   </td>
                 </tr>
@@ -127,14 +232,13 @@ export default function TrashDocumentsPage() {
           </table>
         </div>
 
-        {/* --- FOOTER INFO --- */}
-        <div className="mt-4 flex justify-between items-center text-[10px] text-gray-600 uppercase font-bold tracking-widest">
-          <p>Note: Items in trash will be automatically deleted after 30 days.</p>
-          <button className="text-red-500/50 hover:text-red-500 transition-colors uppercase">
-            Empty Trash Now
-          </button>
+        <div className="mt-8 flex flex-col md:flex-row justify-between items-center gap-4">
+          <p className="text-[10px] font-black uppercase tracking-widest opacity-30 italic">
+            Catatan: Berkas di trash akan dihapus permanen secara otomatis setelah 30 hari.
+          </p>
         </div>
       </div>
     </div>
   );
 }
+

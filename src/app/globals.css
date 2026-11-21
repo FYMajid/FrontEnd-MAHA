@@ -167,6 +167,96 @@
   --z-index-999999: 999999;
 }
 
+/* Light Mode Theme Variables */
+:root {
+  /* Background Colors */
+  --bg-primary: #f9fafb;
+  --bg-secondary: #ffffff;
+  --bg-tertiary: #f2f4f7;
+  --bg-hover: #f0f9ff;
+  --bg-active: #ecf3ff;
+  
+  /* Text Colors */
+  --text-primary: #101828;
+  --text-secondary: #344054;
+  --text-tertiary: #667085;
+  --text-quaternary: #98a2b3;
+  --text-inverse: #ffffff;
+  
+  /* Border Colors */
+  --border-primary: #e4e7ec;
+  --border-secondary: #d0d5dd;
+  --border-light: #f2f4f7;
+  
+  /* Component Colors */
+  --input-bg: #ffffff;
+  --input-border: #e4e7ec;
+  --input-text: #101828;
+  --input-placeholder: #98a2b3;
+  
+  --button-bg: #465fff;
+  --button-text: #ffffff;
+  --button-hover: #3641f5;
+  
+  --card-bg: #ffffff;
+  --card-border: #e4e7ec;
+  --card-shadow: rgba(16, 24, 40, 0.08);
+  
+  /* Surface Colors */
+  --surface-0: #ffffff;
+  --surface-1: #fcfcfd;
+  --surface-2: #f9fafb;
+  --surface-3: #f2f4f7;
+  
+  /* Overlay */
+  --overlay-bg: rgba(16, 24, 40, 0.8);
+}
+
+/* Dark Mode Theme Variables */
+.dark {
+  /* Background Colors */
+  --bg-primary: #0c111d;
+  --bg-secondary: #161f33;
+  --bg-tertiary: #1a2231;
+  --bg-hover: #1e293b;
+  --bg-active: #252dae;
+  
+  /* Text Colors */
+  --text-primary: #ffffff;
+  --text-secondary: #e0e7ff;
+  --text-tertiary: #cbd5e1;
+  --text-quaternary: #94a3b8;
+  --text-inverse: #0c111d;
+  
+  /* Border Colors */
+  --border-primary: #334155;
+  --border-secondary: #475569;
+  --border-light: #1e293b;
+  
+  /* Component Colors */
+  --input-bg: #1a2231;
+  --input-border: #334155;
+  --input-text: #f1f5f9;
+  --input-placeholder: #94a3b8;
+  
+  --button-bg: #465fff;
+  --button-text: #ffffff;
+  --button-hover: #5569ff;
+  
+  --card-bg: #1a2231;
+  --card-border: #334155;
+  --card-shadow: rgba(0, 0, 0, 0.4);
+  
+  /* Surface Colors */
+  --surface-0: #0c111d;
+  --surface-1: #161f33;
+  --surface-2: #1a2231;
+  --surface-3: #1e293b;
+  
+  /* Overlay */
+  --overlay-bg: rgba(0, 0, 0, 0.9);
+}
+
 /*
   The default border color has changed to `currentColor` in Tailwind CSS v4,
   so we've added these compatibility styles to make sure everything still
@@ -188,8 +278,14 @@
     cursor: pointer;
   }
   body {
-    @apply relative font-normal font-outfit z-1 bg-gray-50;
+    @apply relative font-normal font-outfit z-1;
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    overflow-x: hidden !important;
+    transition: background-color 0.3s ease, color 0.3s ease;
   }
+
+
 }
 
 @utility menu-item {
@@ -273,6 +369,21 @@
   &::-webkit-scrollbar-thumb {
     @apply bg-gray-200 rounded-full dark:bg-gray-700;
   }
+
+  .table-container::-webkit-scrollbar {
+          height: 8px; /* Ketebalan scrollbar horizontal */
+        }
+        .table-container::-webkit-scrollbar-track {
+          background: rgba(90, 122, 205, 0.1);
+          border-radius: 10px;
+        }
+        .table-container::-webkit-scrollbar-thumb {
+          background: #5A7ACD;
+          border-radius: 10px;
+        }
+        .table-container::-webkit-scrollbar-thumb:hover {
+          background: #FEB05D;
+        }
 }
 
 .dark .custom-scrollbar::-webkit-scrollbar-thumb {
@@ -282,6 +393,62 @@
 
 
 @layer utilities {
+  /* Theme-aware background utilities */
+  .bg-app-primary {
+    background-color: var(--bg-primary);
+  }
+  
+  .bg-app-secondary {
+    background-color: var(--bg-secondary);
+  }
+  
+  .bg-app-tertiary {
+    background-color: var(--bg-tertiary);
+  }
+  
+  /* Theme-aware text utilities */
+  .text-app-primary {
+    color: var(--text-primary);
+  }
+  
+  .text-app-secondary {
+    color: var(--text-secondary);
+  }
+  
+  .text-app-tertiary {
+    color: var(--text-tertiary);
+  }
+  
+  .text-app-quaternary {
+    color: var(--text-quaternary);
+  }
+  
+  /* Theme-aware border utilities */
+  .border-app-primary {
+    border-color: var(--border-primary);
+  }
+  
+  .border-app-light {
+    border-color: var(--border-light);
+  }
+  
+  /* Theme-aware component utilities */
+  .card-theme {
+    background-color: var(--card-bg);
+    border-color: var(--card-border);
+    color: var(--text-primary);
+  }
+  
+  .input-theme {
+    background-color: var(--input-bg);
+    border-color: var(--input-border);
+    color: var(--input-text);
+  }
+  
+  .input-theme::placeholder {
+    color: var(--input-placeholder);
+  }
+  
   /* For Remove Date Icon */
   input[type="date"]::-webkit-inner-spin-button,
   input[type="time"]::-webkit-inner-spin-button,

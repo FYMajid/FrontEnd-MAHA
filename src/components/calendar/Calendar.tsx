@@ -1,319 +1,716 @@
 "use client";
-import React, { useState, useRef, useEffect } from "react";
+
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import timeGridPlugin from "@fullcalendar/timegrid";
 import interactionPlugin from "@fullcalendar/interaction";
 import {
-  EventInput,
   DateSelectArg,
   EventClickArg,
   EventContentArg,
+  EventInput,
 } from "@fullcalendar/core";
+
 import { useModal } from "@/hooks/useModal";
 import { Modal } from "@/components/ui/modal";
-import { CalendarIcon, Upload, XCircle } from "lucide-react";
+import {
+  AlignLeft,
+  Briefcase,
+  CalendarIcon,
+  ChevronDown,
+  Link2,
+  MapPin,
+  Repeat,
+  Upload,
+  Users,
+  X,
+} from "lucide-react";
+import { eventService, EventCategory, EventItem } from "@/services/events";
+import { matterService, MatterItem } from "@/services/matters";
 
 interface CalendarEvent extends EventInput {
   extendedProps: {
     calendar: string;
+    description?: string;
   };
 }
 
+interface EventFormState {
+  id?: string;
+  title: string;
+  categoryId: string;
+  location: string;
+  startTime: string;
+  endTime: string;
+  description: string;
+  matterId: string;
+  notification: string;
+  attendees: string;
+  repeat: string;
+  hyperlink: string;
+  fileUrl: string;
+}
+
+const toLocalInputValue = (date: Date) => {
+  const offset = date.getTimezoneOffset();
+  const local = new Date(date.getTime() - offset * 60000);
+  return local.toISOString().slice(0, 16);
+};
+
+const todayInput = toLocalInputValue(new Date());
+
+const mapEventToCalendar = (event: EventItem): CalendarEvent => ({
+  id: event.id,
+  title: event.title,
+  start: event.startTime,
+  end: event.endTime,
+  extendedProps: {
+    calendar: event.category?.name ?? "Primary",
+    description: event.description ?? undefined,
+  },
+});
+
+const toInputValue = (value?: string | null) => {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return toLocalInputValue(date);
+};
+
+const formatDateRange = (start?: string | null, end?: string | null) => {
+  if (!start) return "-";
+  const startDate = new Date(start);
+  const endDate = end ? new Date(end) : null;
+  if (Number.isNaN(startDate.getTime())) return "-";
+
+  const day = startDate.toLocaleDateString("en-US", {
+    weekday: "long",
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+  });
+  const startTime = startDate.toLocaleTimeString("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  const endTime = endDate
+    ? endDate.toLocaleTimeString("en-US", {
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : "-";
+
+  return `${day} | ${startTime} - ${endTime}`;
+};
+
+const buildEmptyForm = (categoryId: string, start?: string, end?: string) => ({
+  title: "",
+  categoryId,
+  location: "",
+  startTime: start ?? todayInput,
+  endTime: end ?? "",
+  description: "",
+  matterId: "",
+  notification: "",
+  attendees: "",
+  repeat: "none",
+  hyperlink: "",
+  fileUrl: "",
+});
+
 const Calendar: React.FC = () => {
-  const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(
-    null
-  );
-  const [eventTitle, setEventTitle] = useState("");
-  const [eventStartDate, setEventStartDate] = useState("");
-  const [eventEndDate, setEventEndDate] = useState("");
-  const [eventLevel, setEventLevel] = useState("");
-  const [events, setEvents] = useState<CalendarEvent[]>([]);
-  const calendarRef = useRef<FullCalendar>(null);
-  const { isOpen, openModal, closeModal } = useModal();
+  const [events, setEvents] = useState<EventItem[]>([]);
+  const [categories, setCategories] = useState<EventCategory[]>([]);
+  const [matters, setMatters] = useState<MatterItem[]>([]);
+  const [selectedEvent, setSelectedEvent] = useState<EventItem | null>(null);
+  const [form, setForm] = useState<EventFormState | null>(null);
+  const [formMode, setFormMode] = useState<"create" | "edit">("create");
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const { isOpen: isFormOpen, openModal: openForm, closeModal: closeForm } =
+    useModal();
+  const {
+    isOpen: isDetailOpen,
+    openModal: openDetail,
+    closeModal: closeDetail,
+  } = useModal();
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // 2. Fungsi untuk memicu jendela pilih file
-  const handleUploadClick = () => {
-    fileInputRef.current?.click();
-  };
-
-  // 3. Fungsi untuk menangani file yang terpilih
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      console.log("File terpilih:", file.name);
-      // Lakukan logika upload Anda di sini
-    }
-  };
-
-  const calendarsEvents = {
-    Danger: "danger",
-    Success: "success",
-    Primary: "primary",
-    Warning: "warning",
-  };
-
   useEffect(() => {
-    // Initialize with some events
-    setEvents([
-      {
-        id: "1",
-        title: "Event Conf.",
-        start: new Date().toISOString().split("T")[0],
-        extendedProps: { calendar: "Danger" },
-      },
-      {
-        id: "2",
-        title: "Meeting",
-        start: new Date(Date.now() + 86400000).toISOString().split("T")[0],
-        extendedProps: { calendar: "Success" },
-      },
-      {
-        id: "3",
-        title: "Workshop",
-        start: new Date(Date.now() + 172800000).toISOString().split("T")[0],
-        end: new Date(Date.now() + 259200000).toISOString().split("T")[0],
-        extendedProps: { calendar: "Primary" },
-      },
-    ]);
+    let isActive = true;
+
+    Promise.all([eventService.list(), eventService.listCategories(), matterService.list()])
+      .then(([eventData, categoryData, matterData]) => {
+        if (!isActive) return;
+        setEvents(eventData);
+        setCategories(categoryData);
+        setMatters(matterData);
+      })
+      .catch(() => {
+        if (!isActive) return;
+        setEvents([
+          {
+            id: "local-1",
+            title: "Sidang Perdata",
+            categoryId: "",
+            startTime: todayInput,
+            endTime: todayInput,
+            description: "",
+          },
+        ]);
+      });
+
+    return () => {
+      isActive = false;
+    };
   }, []);
 
+  const calendarEvents = useMemo(
+    () => events.map(mapEventToCalendar),
+    [events],
+  );
+
+  const resolveMatterLabel = (event: EventItem) => {
+    if (!event.matterId) return "-";
+    const matter = matters.find((item) => item.id === event.matterId);
+    if (!matter) return event.matter?.caseArea ?? event.matterId;
+    const client = matter.client?.name ?? "Client";
+    return `${client} : ${matter.caseArea} ${matter.caseType}`;
+  };
+
+  const attendeeList = (value?: string | null) => {
+    if (!value) return [];
+    return value
+      .split(/[,;]+/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+  };
+
+  const openCreateModal = (start?: string, end?: string) => {
+    const defaultCategory = categories[0]?.id ?? "";
+    setFormMode("create");
+    setForm(buildEmptyForm(defaultCategory, start, end));
+    setError(null);
+    openForm();
+  };
+
+  const openEditModal = (event: EventItem) => {
+    setFormMode("edit");
+    setForm({
+      id: event.id,
+      title: event.title,
+      categoryId: event.categoryId ?? categories[0]?.id ?? "",
+      location: event.location ?? "",
+      startTime: toInputValue(event.startTime),
+      endTime: toInputValue(event.endTime),
+      description: event.description ?? "",
+      matterId: event.matterId ?? "",
+      notification: event.notification ?? "",
+      attendees: event.attendees ?? "",
+      repeat: event.repeat ?? "none",
+      hyperlink: event.hyperlink ?? "",
+      fileUrl: event.fileUrl ?? "",
+    });
+    setError(null);
+    openForm();
+  };
+
   const handleDateSelect = (selectInfo: DateSelectArg) => {
-    resetModalFields();
-    setEventStartDate(selectInfo.startStr);
-    setEventEndDate(selectInfo.endStr || selectInfo.startStr);
-    openModal();
+    openCreateModal(selectInfo.startStr, selectInfo.endStr);
   };
 
-  const handleEventClick = (clickInfo: EventClickArg) => {
-    const event = clickInfo.event;
-    setSelectedEvent(event as unknown as CalendarEvent);
-    setEventTitle(event.title);
-    setEventStartDate(event.start?.toISOString().split("T")[0] || "");
-    setEventEndDate(event.end?.toISOString().split("T")[0] || "");
-    setEventLevel(event.extendedProps.calendar);
-    openModal();
-  };
-
-  const handleAddOrUpdateEvent = () => {
-    if (selectedEvent) {
-      // Update existing event
-      setEvents((prevEvents) =>
-        prevEvents.map((event) =>
-          event.id === selectedEvent.id
-            ? {
-                ...event,
-                title: eventTitle,
-                start: eventStartDate,
-                end: eventEndDate,
-                extendedProps: { calendar: eventLevel },
-              }
-            : event
-        )
-      );
-    } else {
-      // Add new event
-      const newEvent: CalendarEvent = {
-        id: Date.now().toString(),
-        title: eventTitle,
-        start: eventStartDate,
-        end: eventEndDate,
-        allDay: true,
-        extendedProps: { calendar: eventLevel },
-      };
-      setEvents((prevEvents) => [...prevEvents, newEvent]);
+  const handleEventClick = async (clickInfo: EventClickArg) => {
+    const eventId = String(clickInfo.event.id);
+    try {
+      const detail = await eventService.getById(eventId);
+      setSelectedEvent(detail);
+      openDetail();
+    } catch {
+      const fallback = events.find((item) => item.id === eventId) || null;
+      setSelectedEvent(fallback);
+      openDetail();
     }
-    closeModal();
-    resetModalFields();
   };
 
-  const resetModalFields = () => {
-    setEventTitle("");
-    setEventStartDate("");
-    setEventEndDate("");
-    setEventLevel("");
-    setSelectedEvent(null);
+  const updateForm = (field: keyof EventFormState, value: string) => {
+    setForm((prev) => (prev ? { ...prev, [field]: value } : prev));
   };
+
+  const handleSave = async () => {
+    if (!form) return;
+
+    if (!form.title.trim()) {
+      setError("Title wajib diisi.");
+      return;
+    }
+    if (!form.categoryId) {
+      setError("Category wajib dipilih.");
+      return;
+    }
+
+    setIsSaving(true);
+    setError(null);
+
+    try {
+      if (formMode === "create") {
+        const created = await eventService.create({
+          title: form.title,
+          categoryId: form.categoryId,
+          location: form.location || undefined,
+          startTime: form.startTime || todayInput,
+          endTime: form.endTime || form.startTime || todayInput,
+          description: form.description || undefined,
+          matterId: form.matterId || undefined,
+          notification: form.notification || undefined,
+          attendees: form.attendees || undefined,
+          repeat: form.repeat || undefined,
+          hyperlink: form.hyperlink || undefined,
+          fileUrl: form.fileUrl || undefined,
+        });
+        setEvents((prev) => [created, ...prev]);
+      } else if (form.id) {
+        const updated = await eventService.update(form.id, {
+          title: form.title,
+          categoryId: form.categoryId,
+          location: form.location || undefined,
+          startTime: form.startTime || undefined,
+          endTime: form.endTime || undefined,
+          description: form.description || undefined,
+          matterId: form.matterId || undefined,
+          notification: form.notification || undefined,
+          attendees: form.attendees || undefined,
+          repeat: form.repeat || undefined,
+          hyperlink: form.hyperlink || undefined,
+          fileUrl: form.fileUrl || undefined,
+        });
+        setEvents((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+      }
+
+      closeForm();
+    } catch {
+      setError("Gagal menyimpan event.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!selectedEvent) return;
+    try {
+      await eventService.remove(selectedEvent.id);
+      setEvents((prev) => prev.filter((item) => item.id !== selectedEvent.id));
+      closeDetail();
+    } catch {
+      setError("Gagal menghapus event.");
+    }
+  };
+
+  const handleUploadClick = () => fileInputRef.current?.click();
 
   return (
-    <div className="rounded-2xl border  border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]">
-      <div className="custom-calendar">
-        <FullCalendar
-          ref={calendarRef}
-          plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
-          initialView="dayGridMonth"
-          headerToolbar={{
-            left: "prev,next addEventButton",
-            center: "title",
-            right: "dayGridMonth,timeGridWeek,timeGridDay",
-          }}
-          events={events}
-          selectable={true}
-          select={handleDateSelect}
-          eventClick={handleEventClick}
-          eventContent={renderEventContent}
-          customButtons={{
-            addEventButton: {
-              text: "Add Event +",
-              click: openModal,
-            },
-          }}
-        />
-      </div>
+    <div className="rounded-2xl border border-[#5A7ACD]/20 bg-[#F5F2F2] dark:bg-[#2B2A2A] p-5">
+      <FullCalendar
+        plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
+        initialView="dayGridMonth"
+        events={calendarEvents}
+        selectable
+        select={handleDateSelect}
+        eventClick={handleEventClick}
+        eventContent={renderEventContent}
+        headerToolbar={{
+          left: "prev,next addEventButton",
+          center: "title",
+          right: "dayGridMonth,timeGridWeek,timeGridDay",
+        }}
+        customButtons={{
+          addEventButton: {
+            text: "Add Event +",
+            click: () => openCreateModal(),
+          },
+        }}
+      />
+
+      {/* ======================
+         DETAIL MODAL
+      ====================== */}
       <Modal
-  isOpen={isOpen}
-  onClose={closeModal}
-  className="max-w-[700px] p-0 overflow-hidden" // P-0 agar header tetap diam saat konten di-scroll
->
-  <div className="flex flex-col h-[85vh] max-h-[800px]">
-    {/* Header Modal - Tetap di Atas */}
-    <div className="p-6 border-b border-gray-200 dark:border-gray-800">
-      <div className="flex items-center gap-2 mb-2">
-        <div className="p-2 rounded-lg bg-teal-500/10 text-teal-500">
-          <CalendarIcon size={20} />
-        </div>
-        <h5 className="font-bold text-gray-800 dark:text-white/90 text-xl lg:text-2xl">
-          {selectedEvent ? "Edit Event" : "Add Event"}
-        </h5>
-      </div>
-      <p className="text-sm text-gray-500 dark:text-gray-400">
-        Isi detail informasi di bawah ini untuk membuat agenda baru.
-      </p>
-    </div>
-
-    {/* Konten Modal - Area Scrollable */}
-    <div className="flex-1 overflow-y-auto p-6 custom-scrollbar space-y-8 bg-white dark:bg-[#121212]">
-      
-      {/* SECTION 1: DETAIL EVENT */}
-      <section className="space-y-4">
-        <h3 className="text-lg font-bold text-gray-800 dark:text-white">Detail Event</h3>
-        <div className="grid grid-cols-1 gap-4">
-          {/* Event Name */}
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-gray-700 dark:text-white">Event Name</label>
-            <input
-              type="text"
-              placeholder="Masukkan nama agenda..."
-              className="w-full rounded-xl border border-teal-500/30 dark:text-white bg-transparent px-4 py-3 text-sm focus:border-teal-500 focus:ring-2 focus:ring-teal-500/10 dark:border-gray-700 dark:bg-gray-900"
-            />
-          </div>
-
-          {/* Category & Location */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-gray-700 dark:text-white">Event Category</label>
-              <select className="w-full rounded-xl border border-gray-300 dark:text-white bg-transparent px-4 py-3 text-sm dark:border-gray-700 dark:bg-gray-900">
-                <option>Pilih Kategori</option>
-                <option>Sidang</option>
-                <option>Meeting Klien</option>
-              </select>
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-gray-700 dark:text-white">Location</label>
-              <input type="text" placeholder="Lokasi..." className="w-full dark:text-white rounded-xl border border-gray-300 bg-transparent px-4 py-3 text-sm dark:border-gray-700 dark:bg-gray-900" />
-            </div>
-          </div>
-
-          {/* Start & End Time */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-gray-400">
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium dark:text-white text-gray-700">Start Time</label>
-              <input type="datetime-local" className="w-full dark:text-white rounded-xl border border-gray-300 bg-transparent px-4 py-3 text-sm dark:border-gray-700 dark:bg-gray-900" />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-gray-700 dark:text-white">End Time</label>
-              <input type="datetime-local" className="w-full rounded-xl dark:text-white border border-gray-300 bg-transparent px-4 py-3 text-sm dark:border-gray-700 dark:bg-gray-900" />
-            </div>
-          </div>
-
-          {/* Description */}
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-gray-700 dark:text-white">Description</label>
-            <textarea rows={3} placeholder="Deskripsi agenda..." className="w-full rounded-xl dark:text-white border border-gray-300 bg-transparent px-4 py-3 text-sm dark:border-gray-700 dark:bg-gray-900" />
-          </div>
-        </div>
-      </section>
-
-      {/* SECTION 2: EVENT RELATION */}
-      <section className="space-y-4 pt-4 border-t border-gray-100 dark:border-gray-800">
-        <h3 className="text-lg font-bold text-gray-800 dark:text-white">Event Relation</h3>
-        <div className="space-y-4">
-          <select className="w-full rounded-xl border border-gray-300 bg-transparent px-4 py-3 text-sm dark:text-white dark:border-gray-700 dark:bg-gray-900"><option>Matter</option></select>
-          <div className="flex gap-2">
-            <select className="flex-1 rounded-xl border border-gray-300 bg-transparent px-4 py-3 text-sm dark:border-gray-700  dark:text-white  dark:bg-gray-900"><option>Aufa Hajran</option></select>
-            <button className="p-3 text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-xl transition-colors">
-              <XCircle size={20} />
-            </button>
-          </div>
-          <select className="w-full rounded-xl border border-gray-300 bg-transparent px-4 py-3 text-sm dark:text-white dark:border-gray-700 dark:bg-gray-900"><option>Notification</option></select>
-          <input type="text" placeholder="Attendees" className="w-full rounded-xl border dark:text-white border-gray-300 bg-transparent px-4 py-3 text-sm dark:border-gray-700 dark:bg-gray-900" />
-          <select className="w-full rounded-xl border border-gray-300 dark:text-white bg-transparent px-4 py-3 text-sm dark:border-gray-700 dark:bg-gray-900"><option>Repeat</option></select>
-          <input type="url" placeholder="Hyperlink" className="w-full rounded-xl border border-gray-300 bg-transparent px-4 py-3 text-sm dark:text-white dark:border-gray-700 dark:bg-gray-900" />
-        </div>
-      </section>
-
-      {/* SECTION 3: UPLOAD FILE */}
-     <section className="space-y-4 pt-4 border-t border-gray-100 dark:border-gray-800">
-      <h3 className="text-lg font-bold text-teal-500 dark:text-teal-400">Upload File</h3>
-      
-      {/* 4. Tambahkan onClick pada div container */}
-      <div 
-        onClick={handleUploadClick}
-        className="border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-2xl p-8 flex flex-col items-center justify-center gap-3 hover:border-teal-500 transition-colors cursor-pointer group"
+        isOpen={isDetailOpen}
+        onClose={closeDetail}
+        showCloseButton={false}
+        className="bg-transparent shadow-none max-w-4xl w-[92vw]"
       >
-        {/* 5. Input file yang disembunyikan */}
-        <input 
-          type="file" 
-          ref={fileInputRef}
-          onChange={handleFileChange}
-          accept="image/*" // Membatasi hanya untuk file gambar
-          className="hidden" 
-        />
+        {selectedEvent && (
+          <div className="bg-[#F5F2F2] dark:bg-[#2B2A2A] text-[#2B2A2A] dark:text-[#F5F2F2] rounded-3xl border border-white/10">
+            <div className="flex items-center justify-between px-8 py-6 border-b border-white/10">
+              <div className="flex items-center gap-3 text-[#2B2A2A] dark:text-[#F5F2F2] font-black uppercase tracking-widest text-xs">
+                <CalendarIcon size={16} /> Detail Event
+              </div>
+              <button
+                onClick={closeDetail}
+                className="text-white/60 hover:text-white transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
 
-        <Upload className="text-gray-400 group-hover:text-teal-500 transition-colors" size={32} />
-        <div className="text-center">
-          <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
-            Select or drag and drop your files here
-          </p>
-          <p className="text-xs text-gray-400 mt-1">(Up to 5MB)</p>
-        </div>
-      </div>
-    </section>
-    </div>
+            <div className="px-8 py-8 space-y-6">
+              <div className="flex gap-4">
+                <div className="w-1 rounded-full bg-[#F5F2F2] dark:bg-[#2B2A2A]" />
+                <div>
+                  <h2 className="text-2xl font-black uppercase tracking-tight">
+                    {selectedEvent.title}
+                  </h2>
+                  <p className="text-sm text-[#2B2A2A] dark:text-[#F5F2F2] mt-1">
+                    {formatDateRange(selectedEvent.startTime, selectedEvent.endTime)}
+                  </p>
+                </div>
+              </div>
 
-    {/* Footer Modal - Tetap di Bawah */}
-    <div className="p-6 border-t border-gray-200 dark:border-gray-800 flex items-center gap-3 bg-white dark:bg-[#121212]">
-      <button
-        onClick={closeModal}
-        className="flex-1 justify-center rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm font-bold text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 sm:flex-none sm:w-32"
+              <div className="grid grid-cols-1 md:grid-cols-[200px_1fr] gap-4 text-sm">
+                <div className="flex items-center gap-3 text-[#2B2A2A] dark:text-[#F5F2F2]">
+                  <Briefcase size={18} /> Matter
+                </div>
+                <div className="font-semibold">
+                  {resolveMatterLabel(selectedEvent)}
+                </div>
+
+                <div className="flex items-center gap-3 text-[#2B2A2A] dark:text-[#F5F2F2]">
+                  <MapPin size={18} /> Location
+                </div>
+                <div className="font-semibold">
+                  {selectedEvent.location || "-"}
+                </div>
+
+                <div className="flex items-center gap-3 text-[#2B2A2A] dark:text-[#F5F2F2]">
+                  <AlignLeft size={18} /> Description
+                </div>
+                <div className="font-semibold">
+                  {selectedEvent.description || "-"}
+                </div>
+
+                <div className="flex items-center gap-3 text-[#2B2A2A] dark:text-[#F5F2F2]">
+                  <Repeat size={18} /> Repeat
+                </div>
+                <div className="font-semibold">
+                  {selectedEvent.repeat || "none"}
+                </div>
+
+                <div className="flex items-center gap-3 text-[#2B2A2A] dark:text-[#F5F2F2]">
+                  <Upload size={18} /> Upload File
+                </div>
+                <div className="font-semibold">
+                  {selectedEvent.fileUrl || "No documents available"}
+                </div>
+
+                <div className="flex items-center gap-3 text-[#2B2A2A] dark:text-[#F5F2F2]">
+                  <Link2 size={18} /> Hyperlink
+                </div>
+                <div className="font-semibold">
+                  {selectedEvent.hyperlink || "-"}
+                </div>
+
+                <div className="flex items-center gap-3 text-[#2B2A2A] dark:text-[#F5F2F2]">
+                  <Users size={18} /> Attendees
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {attendeeList(selectedEvent.attendees).length === 0 ? (
+                    <span className="font-semibold">-</span>
+                  ) : (
+                    attendeeList(selectedEvent.attendees).map((attendee) => (
+                      <span
+                        key={attendee}
+                        className="px-3 py-1 rounded-full bg-white/10 text-xs font-bold"
+                      >
+                        {attendee}
+                      </span>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-4 px-8 py-6 border-t border-white/10">
+              <button
+                onClick={handleDelete}
+                className="text-[#2B2A2A] dark:text-[#F5F2F2] hover:text-[#FEB05D] dark:hover:text-[#FEB05D] text-sm font-semibold"
+              >
+                Delete Event
+              </button>
+              <button
+                onClick={() => {
+                  closeDetail();
+                  openEditModal(selectedEvent);
+                }}
+                className="px-6 py-3 rounded-xl bg-[#5A7ACD] hover:bg-[#FEB05D] text-white hover:text-[#2B2A2A] text-sm font-black uppercase tracking-widest transition-all"
+              >
+                Edit Event
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* ======================
+         FORM MODAL
+      ====================== */}
+      <Modal
+        isOpen={isFormOpen}
+        onClose={closeForm}
+        showCloseButton={false}
+        className="bg-transparent shadow-none max-w-4xl w-[92vw]"
       >
-        Close
-      </button>
-      <button
-        onClick={handleAddOrUpdateEvent}
-        className="flex-1 justify-center rounded-xl bg-teal-500 px-4 py-3 text-sm font-black text-white hover:bg-teal-600 shadow-lg shadow-teal-500/20 sm:flex-none sm:w-48"
-      >
-        {selectedEvent ? "Update Changes" : "Save Agenda"}
-      </button>
+        {form && (
+          <div className="bg-[#F5F2F2] dark:bg-[#2B2A2A] text-[#2B2A2A] dark:text-[#F5F2F2] rounded-3xl border border-white/10">
+            <div className="flex items-center justify-between px-8 py-6 border-b border-black dark:border-white">
+              <div className="flex items-center gap-3 text-[#5A7ACD] font-black uppercase tracking-widest text-xs">
+                <CalendarIcon size={16} />
+                {formMode === "create" ? "Create Event" : "Edit Event"}
+              </div>
+              <button
+                onClick={closeForm}
+                className="text-[#2B2A2A] dark:text-[#F5F2F2] hover:text-white transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="px-8 py-8 space-y-6">
+              {error && <p className="text-red-400 text-sm">{error}</p>}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-[10px] uppercase tracking-[0.2em] text-[#2B2A2A] dark:text-[#F5F2F2] font-black">
+                    Title
+                  </label>
+                  <input
+                    value={form.title}
+                    onChange={(e) => updateForm("title", e.target.value)}
+                    className="w-full bg-black/5 dark:bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-[#5A7ACD]"
+                    placeholder="Event title"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] uppercase tracking-[0.2em] text-[#2B2A2A] dark:text-[#F5F2F2] font-black">
+                    Category
+                  </label>
+                  <div className="relative">
+                    <select
+                      value={form.categoryId}
+                      onChange={(e) => updateForm("categoryId", e.target.value)}
+                      className="w-full bg-black/5 dark:bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm appearance-none outline-none focus:border-[#5A7ACD]"
+                    >
+                      <option value="">Select category</option>
+                      {categories.map((cat) => (
+                        <option key={cat.id} value={cat.id}>
+                          {cat.name}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown
+                      size={16}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-black/40 dark:text-white/40"
+                    />
+                  </div>
+                  {categories.length === 0 && (
+                    <p className="text-xs text-[#2B2A2A] dark:text-[#F5F2F2]">
+                      Tambahkan event category di backend.
+                    </p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] uppercase tracking-[0.2em] text-[#2B2A2A] dark:text-[#F5F2F2] font-black">
+                    Start
+                  </label>
+                  <input
+                    type="datetime-local"
+                    value={form.startTime}
+                    onChange={(e) => updateForm("startTime", e.target.value)}
+                    className="w-full bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-[#5A7ACD]"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] uppercase tracking-[0.2em] text-[#2B2A2A] dark:text-[#F5F2F2] font-black">
+                    End
+                  </label>
+                  <input
+                    type="datetime-local"
+                    value={form.endTime}
+                    onChange={(e) => updateForm("endTime", e.target.value)}
+                    className="w-full bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-[#5A7ACD]"
+                  />
+                </div>
+
+                <div className="space-y-2 md:col-span-2">
+                  <label className="text-[10px] uppercase tracking-[0.2em] text-[#2B2A2A] dark:text-[#F5F2F2] font-black">
+                    Matter
+                  </label>
+                  <div className="relative">
+                    <select
+                      value={form.matterId}
+                      onChange={(e) => updateForm("matterId", e.target.value)}
+                      className="w-full bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 rounded-xl px-4 py-3 text-sm appearance-none outline-none focus:border-[#5A7ACD]"
+                    >
+                      <option value="">Select matter</option>
+                      {matters.map((matter) => (
+                        <option key={matter.id} value={matter.id}>
+                          {matter.client?.name ?? "Client"} - {matter.caseArea} {matter.caseType}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown
+                      size={16}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-black/40 dark:text-white/40"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] uppercase tracking-[0.2em] text-[#2B2A2A] dark:text-[#F5F2F2] font-black">
+                    Location
+                  </label>
+                  <input
+                    value={form.location}
+                    onChange={(e) => updateForm("location", e.target.value)}
+                    className="w-full bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-[#5A7ACD]"
+                    placeholder="Location"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] uppercase tracking-[0.2em] text-[#2B2A2A] dark:text-[#F5F2F2] font-black">
+                    Repeat
+                  </label>
+                  <div className="relative">
+                    <select
+                      value={form.repeat}
+                      onChange={(e) => updateForm("repeat", e.target.value)}
+                      className="w-full bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 rounded-xl px-4 py-3 text-sm appearance-none outline-none focus:border-[#5A7ACD]"
+                    >
+                      {[
+                        "none",
+                        "daily",
+                        "weekly",
+                        "monthly",
+                      ].map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown
+                      size={16}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-black/40 dark:text-white/40"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] uppercase tracking-[0.2em] text-[#2B2A2A] dark:text-[#F5F2F2] font-black">
+                    Notification
+                  </label>
+                  <input
+                    value={form.notification}
+                    onChange={(e) => updateForm("notification", e.target.value)}
+                    className="w-full bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-[#5A7ACD]"
+                    placeholder="15 minutes before"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] uppercase tracking-[0.2em] text-[#2B2A2A] dark:text-[#F5F2F2] font-black">
+                    Attendees
+                  </label>
+                  <input
+                    value={form.attendees}
+                    onChange={(e) => updateForm("attendees", e.target.value)}
+                    className="w-full bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-[#5A7ACD]"
+                    placeholder="Aufa Hajran, Team"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] uppercase tracking-[0.2em] text-[#2B2A2A] dark:text-[#F5F2F2] font-black">
+                    Hyperlink
+                  </label>
+                  <input
+                    value={form.hyperlink}
+                    onChange={(e) => updateForm("hyperlink", e.target.value)}
+                    className="w-full bg-black/5 dark:bg-white/5 border bg-black/10 dark:border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-[#5A7ACD]"
+                    placeholder="https://"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] uppercase tracking-[0.2em] text-[#2B2A2A] dark:text-[#F5F2F2] font-black">
+                    File URL
+                  </label>
+                  <input
+                    value={form.fileUrl}
+                    onChange={(e) => updateForm("fileUrl", e.target.value)}
+                    className="w-full bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-[#5A7ACD]"
+                    placeholder="/uploads/file.pdf"
+                  />
+                </div>
+
+                <div className="space-y-2 md:col-span-2">
+                  <label className="text-[10px] uppercase tracking-[0.2em] text-[#2B2A2A] dark:text-[#F5F2F2] font-black">
+                    Description
+                  </label>
+                  <textarea
+                    value={form.description}
+                    onChange={(e) => updateForm("description", e.target.value)}
+                    className="w-full bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-[#5A7ACD] min-h-[120px]"
+                    placeholder="Description"
+                  />
+                </div>
+
+                <div
+                  onClick={handleUploadClick}
+                  className="border-2 border-dashed border-black/10 dark:border-white/10 rounded-2xl px-4 py-6 text-sm text-[#2B2A2A] dark:text-[#F5F2F2] flex items-center gap-3 cursor-pointer hover:border-[#5A7ACD] transition-all md:col-span-2"
+                >
+                  <Upload size={18} className="text-[#5A7ACD]" />
+                  Upload file (optional)
+                  <input ref={fileInputRef} type="file" className="hidden" />
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-4 px-8 py-6 border-t border-white/10">
+              <button
+                onClick={closeForm}
+                className="text-[#2B2A2A] dark:text-[#F5F2F2] hover:text-[#FEB05D] dark:hover:text-[#FEB05D] text-sm font-semibold"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={isSaving}
+                className="px-6 py-3 rounded-xl bg-[#5A7ACD] hover:bg-[#FEB05D] text-white hover:text-[#2B2A2A] text-sm font-black uppercase tracking-widest transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {isSaving ? "Saving..." : formMode === "create" ? "Create Event" : "Save Changes"}
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
+  );
+};
+
+/* ======================
+   EVENT RENDER
+====================== */
+
+const renderEventContent = (eventInfo: EventContentArg) => (
+  <div className="text-xs bg-[#5A7ACD] text-white px-2 py-1 rounded">
+    {eventInfo.event.title}
   </div>
-</Modal>
-    </div>
-  );
-};
-
-const renderEventContent = (eventInfo: EventContentArg) => {
-  const colorClass = `fc-bg-${eventInfo.event.extendedProps.calendar.toLowerCase()}`;
-  return (
-    <div
-      className={`event-fc-color flex fc-event-main ${colorClass} p-1 rounded-sm`}
-    >
-      <div className="fc-daygrid-event-dot"></div>
-      <div className="fc-event-time">{eventInfo.timeText}</div>
-      <div className="fc-event-title">{eventInfo.event.title}</div>
-    </div>
-  );
-};
+);
 
 export default Calendar;
