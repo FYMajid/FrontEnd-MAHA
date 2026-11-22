@@ -24,7 +24,7 @@ export default function NotificationDropdown() {
   return (
     <div className="relative">
       <button
-        className="relative dropdown-toggle flex items-center justify-center text-gray-500 transition-colors bg-white border border-gray-200 rounded-full hover:text-gray-700 h-11 w-11 hover:bg-gray-100 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white"
+        className="relative dropdown-toggle flex h-11 w-11 items-center justify-center rounded-full bg-[#F5F2F2] text-[#2B2A2A] transition-colors hover:bg-[#E9E4E4] dark:bg-[#333333] dark:text-[#F5F2F2] dark:hover:bg-[#3d3d3d]"
         onClick={handleClick}
       >
         <span

@@ -3,11 +3,11 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSidebar } from "@/context/SidebarContext";
 import AppSidebar from "@/layout/AppSidebar";
-import { Menu } from "lucide-react";
+import AppHeader from "@/layout/AppHeader";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const { isComputerClose, isMobileOpen, toggleMobileSidebar } = useSidebar();
+  const { isComputerClose, isMobileOpen } = useSidebar();
   const [isChecking, setIsChecking] = useState(true);
 
   useEffect(() => {
@@ -36,19 +36,16 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     <div className="min-h-screen bg-[#F5F2F2] dark:bg-[#2B2A2A]">
       <AppSidebar />
 
-      {/* Trigger Mobile/iPad: Pojok kiri atas menempel layar */}
-      {!isMobileOpen && (
-        <button 
-          onClick={toggleMobileSidebar} 
-          className="lg:hidden fixed top-4 left-0 z-[40] bg-[#5A7ACD] text-white p-3 rounded-r-xl shadow-lg active:scale-95 transition-all"
-        >
-          <Menu size={20} strokeWidth={3} />
-        </button>
-      )}
-
       {/* Main Content Area */}
-      <div className={`transition-all duration-500 ease-in-out ${isMobileOpen ? "ml-0" : desktopMargin}`}>
-        <main className="p-4 md:p-8">
+      <div
+        className={`flex min-h-screen flex-col transition-all duration-500 ease-in-out ${
+          isMobileOpen ? "ml-0" : desktopMargin
+        }`}
+      >
+        {/* Header persistent: dipasang sekali di layout, tidak remount saat pindah halaman */}
+        <AppHeader />
+
+        <main className="flex-1 p-4 md:px-8 md:pb-8 md:pt-4">
           {children}
         </main>
       </div>

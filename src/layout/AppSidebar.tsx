@@ -52,7 +52,7 @@ const AppSidebar: React.FC = () => {
     <>
       {/* Overlay Mobile: Layar gelap saat sidebar buka di HP/iPad */}
       {isMobileOpen && (
-        <div 
+        <div
           className="fixed inset-0 z-[45] bg-[#2B2A2A]/60 backdrop-blur-sm lg:hidden transition-opacity duration-300"
           onClick={toggleMobileSidebar}
         />
@@ -67,7 +67,7 @@ const AppSidebar: React.FC = () => {
           ${isMobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}
       >
         {/* Tombol Toggle PC di perbatasan */}
-        <button 
+        <button
           onClick={toggleComputerSidebar}
           className="hidden lg:flex absolute -right-4 top-10 items-center justify-center w-8 h-8 rounded-full 
             bg-[#5A7ACD] text-white shadow-lg z-[60] border-4 border-[#F5F2F2] dark:border-[#2B2A2A]"
@@ -100,14 +100,14 @@ const AppSidebar: React.FC = () => {
                       href={nav.path}
                       onClick={() => isMobileOpen && toggleMobileSidebar()}
                       className={`flex items-center justify-center p-3 rounded-xl transition-all duration-300
-                        ${active 
-                          ? "bg-[#5A7ACD] text-white shadow-lg shadow-[#5A7ACD]/20" 
+                        ${active
+                          ? "bg-[#5A7ACD] text-white shadow-lg shadow-[#5A7ACD]/20"
                           : "text-[#2B2A2A] dark:text-[#F5F2F2] opacity-60 hover:opacity-100 hover:bg-[#FEB05D] dark:hover:text-[#2B2A2A]"}
                         /* Jika Melebar (Expanded), padding kiri disesuaikan */
                         ${isDesktopExpanded ? "lg:justify-start lg:w-[240px] lg:px-4" : "w-12 h-12"}`}
                     >
                       <span className="flex-shrink-0">{nav.icon}</span>
-                      
+
                       {/* Teks hanya muncul di PC saat isComputerClose FALSE */}
                       {isDesktopExpanded && (
                         <span className="hidden lg:block text-sm font-bold tracking-tight ml-3 animate-in fade-in duration-300">
@@ -119,18 +119,17 @@ const AppSidebar: React.FC = () => {
                 );
               })}
             </ul>
-          </nav> 
+          </nav>
 
           {/* User Profile Section */}
           <div className="mt-auto w-full border-t border-[#2B2A2A]/5 dark:border-[#F5F2F2]/10">
             <div className="w-full px-3 py-4">
               <Link
                 href="/me"
-                className={`flex w-full items-center gap-3 transition-all duration-300 group ${
-                  isDesktopExpanded
-                    ? "bg-white/60 dark:bg-white/5 p-3 rounded-2xl hover:bg-[#FEB05D]/10"
-                    : "justify-center"
-                }`}
+                className={`flex w-full items-center gap-3 transition-all duration-300 group ${isDesktopExpanded
+                  ? "bg-white/60 dark:bg-white/5 p-3 rounded-2xl hover:bg-[#FEB05D]/10"
+                  : "justify-center"
+                  }`}
               >
                 <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#5A7ACD] text-white font-black text-sm shadow-md group-hover:scale-105 transition-transform">
                   {userData.initials}
@@ -148,8 +147,6 @@ const AppSidebar: React.FC = () => {
                 )}
               </Link>
             </div>
-
-            <ThemeToggleButton />
           </div>
         </div>
       </aside>
