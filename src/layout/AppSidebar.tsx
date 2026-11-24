@@ -60,7 +60,7 @@ const AppSidebar: React.FC = () => {
 
       <aside
         className={`fixed top-0 left-0 h-screen transition-all duration-500 ease-in-out z-50 border-r
-          bg-[#F5F2F2] dark:bg-[#2B2A2A] border-[#2B2A2A]/5 dark:border-[#F5F2F2]/10
+          bg-white dark:bg-[#2B2A2A] border-[#2B2A2A]/5 dark:border-[#F5F2F2]/10
           /* Lebar tetap 90px saat isMobileOpen (HP) atau isComputerClose (PC) */
           ${isComputerClose || isMobileOpen ? "w-[90px]" : "w-[280px]"}
           /* Mobile: Drawer translate, PC: Selalu muncul */

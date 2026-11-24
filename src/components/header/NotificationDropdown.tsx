@@ -24,7 +24,7 @@ export default function NotificationDropdown() {
   return (
     <div className="relative">
       <button
-        className="relative dropdown-toggle flex h-11 w-11 items-center justify-center rounded-full bg-[#F5F2F2] text-[#2B2A2A] transition-colors hover:bg-[#E9E4E4] dark:bg-[#333333] dark:text-[#F5F2F2] dark:hover:bg-[#3d3d3d]"
+        className="relative dropdown-toggle flex h-11 w-11 items-center justify-center rounded-full bg-[#F5F2F2] text-[#2B2A2A] transition-colors hover:bg-[#E9E4E4] dark:bg-[#232323] dark:text-[#F5F2F2] dark:hover:bg-[#3A3A3A]"
         onClick={handleClick}
       >
         <span
@@ -52,7 +52,7 @@ export default function NotificationDropdown() {
       <Dropdown
         isOpen={isOpen}
         onClose={closeDropdown}
-        className="absolute -right-[240px] mt-[17px] flex h-[480px] w-[350px] flex-col rounded-2xl border border-gray-200 bg-white p-3 shadow-theme-lg dark:border-gray-800 dark:bg-gray-dark sm:w-[361px] lg:right-0"
+        className="absolute right-0 mt-3 flex h-[480px] w-[350px] max-w-[calc(100vw-2rem)] flex-col rounded-2xl border border-gray-200 bg-white p-3 shadow-theme-lg dark:border-[#F5F2F2]/10 dark:bg-[#333232] sm:w-[361px]"
       >
         <div className="flex items-center justify-between pb-3 mb-3 border-b border-gray-100 dark:border-gray-700">
           <h5 className="text-lg font-semibold text-gray-800 dark:text-gray-200">

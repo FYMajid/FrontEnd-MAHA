@@ -113,8 +113,8 @@ const AppHeader: React.FC = () => {
         }`;
 
     return (
-        <header className="sticky top-0 z-40 w-full bg-[#F5F2F2]/95 px-3 pt-3 backdrop-blur-md dark:bg-[#2B2A2A]/95 md:px-6 md:pt-5">
-            <div className="mx-auto flex h-16 w-full items-center justify-between gap-2 rounded-2xl border border-black/5 bg-white px-2 shadow-[0_10px_30px_-15px_rgba(0,0,0,0.15)] transition-colors duration-500 dark:border-white/5 dark:bg-[#232323] dark:shadow-none md:gap-3 md:px-3">
+        <header className="sticky top-0 z-40 w-full border-b border-[#2B2A2A]/10 bg-white px-3 transition-colors duration-500 dark:border-[#F5F2F2]/10 dark:bg-[#333232] md:px-6">
+            <div className="mx-auto flex h-16 w-full items-center justify-between gap-2 md:gap-3">
                 {/* ===== KIRI: Menu + Search + Plus + Timer ===== */}
                 <div className="flex min-w-0 flex-1 items-center gap-2">
                     {/* Trigger sidebar untuk mobile/iPad */}
@@ -127,7 +127,7 @@ const AppHeader: React.FC = () => {
                     </button>
 
                     {/* Menu dropdown + pencarian */}
-                    <div className="flex h-11 min-w-0 flex-1 items-center rounded-xl bg-[#F5F2F2] pl-1 pr-2 dark:bg-[#333333] md:max-w-[540px]">
+                    <div className="flex h-11 min-w-0 flex-1 items-center rounded-xl bg-[#F5F2F2] pl-1 pr-2 dark:bg-[#232323] md:max-w-[540px]">
                         <div className="relative hidden shrink-0 sm:block" ref={menuRef}>
                             <button
                                 onClick={() => {
@@ -214,7 +214,7 @@ const AppHeader: React.FC = () => {
                     </div>
 
                     {/* Stopwatch */}
-                    <div className="hidden h-11 shrink-0 items-center gap-1 rounded-xl bg-[#F5F2F2] px-2 dark:bg-[#333333] md:flex">
+                    <div className="hidden h-11 shrink-0 items-center gap-1 rounded-xl bg-[#F5F2F2] px-2 dark:bg-[#232323] md:flex">
                         <button
                             onClick={() => setIsRunning((prev) => !prev)}
                             className="flex h-8 w-8 items-center justify-center rounded-lg text-[#5A7ACD] transition hover:bg-black/5 dark:text-[#F5F2F2] dark:hover:bg-white/10"
@@ -241,7 +241,7 @@ const AppHeader: React.FC = () => {
 
                 {/* ===== KANAN: Theme + Notifikasi ===== */}
                 <div className="flex shrink-0 items-center gap-2">
-                    <div className="flex items-center gap-1 rounded-full bg-[#F5F2F2] p-1 dark:bg-[#333333]">
+                    <div className="flex items-center gap-1 rounded-full bg-[#F5F2F2] p-1 dark:bg-[#232323]">
                         <button
                             onClick={() => setTheme("light")}
                             className={themeButtonClass(theme === "light")}

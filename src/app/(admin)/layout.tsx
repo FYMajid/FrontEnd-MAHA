@@ -38,14 +38,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
       {/* Main Content Area */}
       <div
-        className={`flex min-h-screen flex-col transition-all duration-500 ease-in-out ${
+        className={`flex min-h-screen min-w-0 flex-col transition-all duration-500 ease-in-out ${
           isMobileOpen ? "ml-0" : desktopMargin
         }`}
       >
         {/* Header persistent: dipasang sekali di layout, tidak remount saat pindah halaman */}
         <AppHeader />
 
-        <main className="flex-1 p-4 md:px-8 md:pb-8 md:pt-4">
+        <main className="min-w-0 flex-1 overflow-x-clip p-4 md:px-8 md:pb-8 md:pt-4">
           {children}
         </main>
       </div>
