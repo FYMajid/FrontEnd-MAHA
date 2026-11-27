@@ -1,11 +1,22 @@
 "use client";
-import React, { useEffect, useState } from "react";
-import { 
-  Users, Search, Plus, Mail, Phone, MapPin, 
-  MoreVertical, Upload, X, Camera, ChevronDown 
-} from 'lucide-react';
-import { contactService, Contact, ContactFilter } from "@/services/contacts";
+
 import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
+import {
+  AlertCircle,
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
+  Eye,
+  Loader2,
+  Plus,
+  RotateCcw,
+  Search,
+  UserPlus,
+  Users,
+} from "lucide-react";
+import { contactService, Contact, ContactFilter } from "@/services/contacts";
+import AddContactModal from "./AddContactModal";
 
 const FILTER_OPTIONS: Array<{ label: string; value: ContactFilter }> = [
   { label: "All", value: "All" },
@@ -13,31 +24,11 @@ const FILTER_OPTIONS: Array<{ label: string; value: ContactFilter }> = [
   { label: "Non Client", value: "NON_CLIENT" },
 ];
 
-const ENTITY_OPTIONS = [
-  "Personal",
-  "Limited Liability Company",
-  "Cooperative",
-  "Foundation",
-  "Community Organization",
-  "Sole Proprietorship",
-];
+type SortKey = "name" | "contactType" | "createdAt";
+type SortState = { key: SortKey; direction: "asc" | "desc" };
 
-const ORGANIZATION_TYPES = new Set([
-  "Cooperative",
-  "Foundation",
-  "Community Organization",
-]);
-
-const GENDER_OPTIONS = ["Male", "Female", "Other"];
-const RELIGION_OPTIONS = [
-  "Islam",
-  "Christian",
-  "Catholic",
-  "Hindu",
-  "Buddha",
-  "Konghucu",
-  "Other",
-];
+const focusRing =
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5A7ACD] focus-visible:ring-offset-2 focus-visible:ring-offset-[#F5F2F2] dark:focus-visible:ring-offset-[#2B2A2A]";
 
 const formatContactDate = (value?: string | null) => {
   if (!value) return "-";
@@ -45,7 +36,7 @@ const formatContactDate = (value?: string | null) => {
   if (Number.isNaN(date.getTime())) return "-";
   return date.toLocaleDateString("id-ID", {
     day: "2-digit",
-    month: "long",
+    month: "short",
     year: "numeric",
   });
 };
@@ -53,15 +44,53 @@ const formatContactDate = (value?: string | null) => {
 const getClientLabel = (status: Contact["isClient"]) =>
   status === "CLIENT" ? "Client" : "Non Client";
 
-const normalizeValue = (value: string) => {
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : undefined;
+const getInitials = (name: string) => {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  return parts
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("");
 };
 
-const getCreatorValue = () => {
-  if (typeof window === "undefined") return "system";
-  return window.localStorage.getItem("userId") || "system";
+const sortValue = (contact: Contact, key: SortKey) => {
+  if (key === "createdAt") {
+    return new Date(contact.createdAt).getTime() || 0;
+  }
+  return (contact[key] ?? "").toLowerCase();
 };
+
+function SortIcon({ state, column }: { state: SortState; column: SortKey }) {
+  if (state.key !== column) {
+    return <ArrowUpDown size={13} aria-hidden="true" className="opacity-40" />;
+  }
+  return state.direction === "asc" ? (
+    <ArrowUp size={13} aria-hidden="true" />
+  ) : (
+    <ArrowDown size={13} aria-hidden="true" />
+  );
+}
+
+function StatusBadge({ status }: { status: Contact["isClient"] }) {
+  const isClient = status === "CLIENT";
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
+        isClient
+          ? "border-[#5A7ACD]/25 bg-[#5A7ACD]/10 text-[#334E9E] dark:border-[#5A7ACD]/30 dark:bg-[#5A7ACD]/15 dark:text-[#B8C8F5]"
+          : "border-[#FEB05D]/40 bg-[#FEB05D]/15 text-[#8A4B00] dark:border-[#FEB05D]/30 dark:bg-[#FEB05D]/10 dark:text-[#FDD9AE]"
+      }`}
+    >
+      <span
+        aria-hidden="true"
+        className={`h-1.5 w-1.5 rounded-full ${
+          isClient ? "bg-[#5A7ACD] dark:bg-[#B8C8F5]" : "bg-[#FEB05D]"
+        }`}
+      />
+      {getClientLabel(status)}
+    </span>
+  );
+}
 
 export default function ContactsPage() {
   const [isOpen, setIsOpen] = useState(false);
@@ -70,6 +99,10 @@ export default function ContactsPage() {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [sort, setSort] = useState<SortState>({
+    key: "createdAt",
+    direction: "desc",
+  });
 
   const refreshContacts = async () => {
     setIsLoading(true);
@@ -80,7 +113,7 @@ export default function ContactsPage() {
         filter,
       });
       setContacts(data);
-    } catch (err) {
+    } catch {
       setError("Gagal memuat kontak. Coba lagi.");
     } finally {
       setIsLoading(false);
@@ -102,7 +135,7 @@ export default function ContactsPage() {
         if (isActive) {
           setContacts(data);
         }
-      } catch (err) {
+      } catch {
         if (isActive) {
           setError("Gagal memuat kontak. Coba lagi.");
         }
@@ -119,110 +152,384 @@ export default function ContactsPage() {
     };
   }, [search, filter]);
 
+  const sortedContacts = useMemo(() => {
+    const factor = sort.direction === "asc" ? 1 : -1;
+
+    return [...contacts].sort((leftContact, rightContact) => {
+      const left = sortValue(leftContact, sort.key);
+      const right = sortValue(rightContact, sort.key);
+
+      if (typeof left === "number" && typeof right === "number") {
+        return (left - right) * factor;
+      }
+
+      return (
+        String(left).localeCompare(String(right), "id", {
+          sensitivity: "base",
+        }) * factor
+      );
+    });
+  }, [contacts, sort]);
+
+  const hasActiveFilters = search.trim().length > 0 || filter !== "All";
+
+  const clearFilters = () => {
+    setSearch("");
+    setFilter("All");
+  };
+
+  const toggleSort = (key: SortKey) => {
+    setSort((previous) => {
+      if (previous.key === key) {
+        return {
+          key,
+          direction: previous.direction === "asc" ? "desc" : "asc",
+        };
+      }
+      return { key, direction: key === "createdAt" ? "desc" : "asc" };
+    });
+  };
+
+  const ariaSort = (key: SortKey): "ascending" | "descending" | "none" => {
+    if (sort.key !== key) return "none";
+    return sort.direction === "asc" ? "ascending" : "descending";
+  };
+
   return (
-    <div className="min-h-screen bg-[#F5F2F2] dark:bg-[#2B2A2A] text-[#2B2A2A] dark:text-[#F5F2F2] p-6 transition-colors duration-300">
-      {/* Header Section */}
-      <div className="max-w-7xl mx-auto mb-8 flex justify-between items-center">
+    <div className="bg-[#F5F2F2] text-[#2B2A2A] transition-colors duration-300 dark:bg-[#2B2A2A] dark:text-[#F5F2F2]">
+      <div className="mx-auto mb-6 flex max-w-7xl flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
-          <div className="p-2.5 bg-[#5A7ACD] rounded-xl text-[#F5F2F2]">
-            <Users size={24} />
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#5A7ACD] text-white">
+            <Users size={22} aria-hidden="true" />
+          </span>
+          <div>
+            <h1 className="text-xl font-bold tracking-tight uppercase sm:text-2xl">
+              Contacts
+            </h1>
+            <p className="text-xs text-[#2B2A2A]/70 dark:text-[#F5F2F2]/70">
+              {isLoading
+                ? "Loading contacts..."
+                : error
+                  ? "Could not load contacts"
+                  : `${contacts.length} contact${contacts.length === 1 ? "" : "s"}`}
+            </p>
           </div>
-          <h1 className="text-2xl font-bold tracking-tight uppercase">Contacts</h1>
         </div>
-        <button 
+
+        <button
+          type="button"
           onClick={() => setIsOpen(true)}
-          className="bg-[#5A7ACD] hover:bg-[#FEB05D] text-[#F5F2F2] px-6 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 transition-all shadow-lg shadow-[#5A7ACD]/20"
+          className={`inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-[#4A69BC] px-5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#3F5CA8] hover:shadow-md active:bg-[#3A569F] active:shadow-none ${focusRing}`}
         >
-          <Plus size={18} /> Add Contact
+          <Plus size={18} aria-hidden="true" />
+          Add contact
         </button>
       </div>
 
-      {/* Filter & Search Bar */}
-      <div className="max-w-7xl mx-auto bg-white/50 dark:bg-black/20 backdrop-blur-md p-4 rounded-2xl border border-[#5A7ACD]/20 flex flex-col md:flex-row gap-4 items-center justify-between mb-8 shadow-sm">
-        <div className="relative w-full md:w-96">
-          <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#5A7ACD]" />
-          <input 
-            type="text" 
-            placeholder="Search contact..." 
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-[#F5F2F2] dark:bg-[#2B2A2A] border border-[#5A7ACD]/30 rounded-xl pl-11 pr-4 py-2.5 text-sm focus:ring-2 focus:ring-[#5A7ACD] outline-none transition-all placeholder:text-slate-400"
-          />
-        </div>
-        
-        <div className="flex bg-[#F5F2F2] dark:bg-[#1a1a1a] p-1.5 rounded-xl border border-[#5A7ACD]/20">
-          {FILTER_OPTIONS.map((option) => (
-            <button
-              key={option.value}
-              onClick={() => setFilter(option.value)}
-              className={`px-6 py-2 rounded-lg text-xs font-bold transition-all ${
-                filter === option.value 
-                ? 'bg-[#5A7ACD] text-[#F5F2F2] shadow-md' 
-                : 'text-slate-400 hover:text-[#5A7ACD]'
-              }`}
-            >
-              {option.label}
-            </button>
-          ))}
+      <div className="mx-auto mb-6 flex max-w-7xl flex-col gap-4 rounded-2xl border border-[#2B2A2A]/10 bg-white p-4 shadow-sm dark:border-[#F5F2F2]/10 dark:bg-[#333232] lg:flex-row lg:items-end lg:justify-between">
+        <label className="block w-full lg:max-w-md">
+          <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-[#2B2A2A]/70 dark:text-[#F5F2F2]/70">
+            Search contacts
+          </span>
+          <div className="relative">
+            <Search
+              size={18}
+              aria-hidden="true"
+              className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[#2B2A2A]/70 dark:text-[#F5F2F2]/60"
+            />
+            <input
+              type="search"
+              placeholder="Search by name, email, or phone"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              className="h-11 w-full rounded-xl border border-[#2B2A2A]/10 bg-[#F5F2F2] pl-10 pr-4 text-sm text-[#2B2A2A] outline-none transition-colors placeholder:text-[#2B2A2A]/70 focus:border-[#5A7ACD] focus:ring-2 focus:ring-[#5A7ACD]/20 dark:border-[#F5F2F2]/10 dark:bg-[#1F1E1E] dark:text-[#F5F2F2] dark:placeholder:text-[#F5F2F2]/60"
+            />
+          </div>
+        </label>
+
+        <div>
+          <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-[#2B2A2A]/70 dark:text-[#F5F2F2]/70">
+            Client status
+          </span>
+          <div
+            role="group"
+            aria-label="Filter by client status"
+            className="flex w-full rounded-xl border border-[#2B2A2A]/10 bg-[#F5F2F2] p-1 dark:border-[#F5F2F2]/10 dark:bg-[#1F1E1E] sm:w-fit"
+          >
+            {FILTER_OPTIONS.map((option) => {
+              const isActive = filter === option.value;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => setFilter(option.value)}
+                  aria-pressed={isActive}
+                  className={`h-11 flex-1 rounded-lg px-4 text-xs font-semibold transition-colors active:bg-[#3A569F] sm:flex-none ${focusRing} ${
+                    isActive
+                      ? "bg-[#4A69BC] text-white shadow-sm"
+                      : "text-[#2B2A2A]/70 hover:bg-[#2B2A2A]/5 hover:text-[#2B2A2A] dark:text-[#F5F2F2]/70 dark:hover:bg-[#F5F2F2]/10 dark:hover:text-[#F5F2F2]"
+                  }`}
+                >
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
 
-      {/* Table Section */}
-      <div className="max-w-7xl mx-auto bg-white/30 dark:bg-black/10 rounded-3xl border border-[#5A7ACD]/20 overflow-hidden shadow-xl">
+      <div className="min-w-full max-w-full overflow-hidden rounded-2xl border border-[#2B2A2A]/10 bg-white shadow-sm dark:border-[#F5F2F2]/10 dark:bg-[#333232]">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm border-collapse">
-            <thead className="bg-[#5A7ACD] text-[#F5F2F2] uppercase text-[11px] tracking-widest font-black">
+          <table className="w-full text-left text-sm">
+            <caption className="sr-only">Contacts list</caption>
+            <thead className="border-b border-[#2B2A2A]/10 bg-[#F5F2F2] dark:border-[#F5F2F2]/10 dark:bg-[#2B2A2A]">
               <tr>
-                <th className="px-8 py-5">Name <ChevronDown size={14} className="inline ml-1" /></th>
-                <th className="px-8 py-5 text-center">Type</th>
-                <th className="px-8 py-5">Phone Number</th>
-                <th className="px-8 py-5">Email</th>
-                <th className="px-8 py-5 text-right">Address</th>
-                <th className="px-8 py-5 text-right">Last Edit</th>
+                <th
+                  scope="col"
+                  aria-sort={ariaSort("name")}
+                  className="p-0"
+                >
+                  <button
+                    type="button"
+                    onClick={() => toggleSort("name")}
+                    className={`flex min-h-12 w-full items-center gap-1.5 px-3 py-3 text-left text-[11px] font-semibold uppercase tracking-wide text-[#2B2A2A]/70 transition-colors hover:bg-[#2B2A2A]/5 hover:text-[#2B2A2A] hover:underline underline-offset-2 active:opacity-70 dark:text-[#F5F2F2]/70 dark:hover:bg-[#F5F2F2]/10 dark:hover:text-[#F5F2F2] sm:px-6 ${focusRing}`}
+                  >
+                    Name
+                    <SortIcon state={sort} column="name" />
+                  </button>
+                </th>
+                <th
+                  scope="col"
+                  aria-sort={ariaSort("contactType")}
+                  className="hidden p-0 md:table-cell"
+                >
+                  <button
+                    type="button"
+                    onClick={() => toggleSort("contactType")}
+                    className={`flex min-h-12 w-full items-center gap-1.5 px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wide text-[#2B2A2A]/70 transition-colors hover:bg-[#2B2A2A]/5 hover:text-[#2B2A2A] hover:underline underline-offset-2 active:opacity-70 dark:text-[#F5F2F2]/70 dark:hover:bg-[#F5F2F2]/10 dark:hover:text-[#F5F2F2] ${focusRing}`}
+                  >
+                    Type
+                    <SortIcon state={sort} column="contactType" />
+                  </button>
+                </th>
+                <th
+                  scope="col"
+                  className="px-3 py-4 text-[11px] font-semibold uppercase tracking-wide text-[#2B2A2A]/70 dark:text-[#F5F2F2]/70 sm:px-6"
+                >
+                  Status
+                </th>
+                <th
+                  scope="col"
+                  className="hidden px-6 py-4 text-[11px] font-semibold uppercase tracking-wide text-[#2B2A2A]/70 dark:text-[#F5F2F2]/70 lg:table-cell"
+                >
+                  Phone
+                </th>
+                <th
+                  scope="col"
+                  className="hidden px-6 py-4 text-[11px] font-semibold uppercase tracking-wide text-[#2B2A2A]/70 dark:text-[#F5F2F2]/70 xl:table-cell"
+                >
+                  Email
+                </th>
+                <th
+                  scope="col"
+                  className="hidden px-6 py-4 text-[11px] font-semibold uppercase tracking-wide text-[#2B2A2A]/70 dark:text-[#F5F2F2]/70 2xl:table-cell"
+                >
+                  Address
+                </th>
+                <th
+                  scope="col"
+                  aria-sort={ariaSort("createdAt")}
+                  className="hidden p-0 text-right sm:table-cell"
+                >
+                  <button
+                    type="button"
+                    onClick={() => toggleSort("createdAt")}
+                    className={`flex min-h-12 w-full items-center justify-end gap-1.5 px-6 py-3 text-right text-[11px] font-semibold uppercase tracking-wide text-[#2B2A2A]/70 transition-colors hover:bg-[#2B2A2A]/5 hover:text-[#2B2A2A] hover:underline underline-offset-2 active:opacity-70 dark:text-[#F5F2F2]/70 dark:hover:bg-[#F5F2F2]/10 dark:hover:text-[#F5F2F2] ${focusRing}`}
+                  >
+                    Added
+                    <SortIcon state={sort} column="createdAt" />
+                  </button>
+                </th>
+                <th scope="col" className="px-3 py-4 sm:px-6">
+                  <span className="sr-only">Actions</span>
+                </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#5A7ACD]/10">
+            <tbody className="divide-y divide-[#2B2A2A]/5 dark:divide-[#F5F2F2]/5">
               {isLoading ? (
                 <tr>
-                  <td colSpan={6} className="px-8 py-10 text-center text-sm text-slate-400">
-                    Loading contacts...
+                  <td colSpan={8} className="px-6 py-16 text-center">
+                    <span
+                      role="status"
+                      className="inline-flex items-center gap-2 text-sm font-medium text-[#2B2A2A]/70 dark:text-[#F5F2F2]/70"
+                    >
+                      <Loader2
+                        size={16}
+                        aria-hidden="true"
+                        className="animate-spin motion-reduce:animate-none"
+                      />
+                      Loading contacts...
+                    </span>
                   </td>
                 </tr>
               ) : error ? (
                 <tr>
-                  <td colSpan={6} className="px-8 py-10 text-center text-sm text-red-500">
-                    {error}
+                  <td colSpan={8} className="px-6 py-16 text-center">
+                    <div className="mx-auto flex max-w-sm flex-col items-center gap-3">
+                      <AlertCircle
+                        size={24}
+                        aria-hidden="true"
+                        className="text-red-600 dark:text-red-400"
+                      />
+                      <p
+                        role="alert"
+                        className="text-sm font-semibold text-red-700 dark:text-red-300"
+                      >
+                        {error}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => void refreshContacts()}
+                        className={`inline-flex h-11 items-center gap-2 rounded-xl border border-[#2B2A2A]/15 px-4 text-xs font-semibold text-[#2B2A2A] transition-colors hover:bg-[#2B2A2A]/5 dark:border-[#F5F2F2]/15 dark:text-[#F5F2F2] dark:hover:bg-[#F5F2F2]/10 ${focusRing}`}
+                      >
+                        <RotateCcw size={14} aria-hidden="true" />
+                        Try again
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ) : contacts.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-8 py-10 text-center text-sm text-slate-400">
-                    No contacts found.
+                  <td colSpan={8} className="px-6 py-16 text-center">
+                    <div className="mx-auto flex max-w-sm flex-col items-center gap-3">
+                      <span className="flex h-12 w-12 items-center justify-center rounded-full bg-[#5A7ACD]/10 text-[#5A7ACD] dark:bg-[#5A7ACD]/15 dark:text-[#B8C8F5]">
+                        <UserPlus size={22} aria-hidden="true" />
+                      </span>
+                      <p className="text-sm font-semibold">
+                        {hasActiveFilters
+                          ? "No contacts match your filters"
+                          : "No contacts yet"}
+                      </p>
+                      <p className="text-xs text-[#2B2A2A]/70 dark:text-[#F5F2F2]/70">
+                        {hasActiveFilters
+                          ? "Try a different search or clear the filter."
+                          : "Add your first contact to get started."}
+                      </p>
+                      {hasActiveFilters ? (
+                        <button
+                          type="button"
+                          onClick={clearFilters}
+                          className={`inline-flex h-11 items-center gap-2 rounded-xl border border-[#2B2A2A]/15 px-4 text-xs font-semibold text-[#2B2A2A] transition-colors hover:bg-[#2B2A2A]/5 dark:border-[#F5F2F2]/15 dark:text-[#F5F2F2] dark:hover:bg-[#F5F2F2]/10 ${focusRing}`}
+                        >
+                          Clear filters
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setIsOpen(true)}
+                          className={`inline-flex h-11 items-center gap-2 rounded-xl bg-[#5A7ACD] px-4 text-xs font-semibold text-white transition-colors hover:bg-[#4A69BC] ${focusRing}`}
+                        >
+                          <Plus size={14} aria-hidden="true" />
+                          Add contact
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ) : (
-                contacts.map((contact) => (
-                  <tr key={contact.id} className="hover:bg-[#5A7ACD]/5 transition-colors group">
-                    <td className="px-8 py-5 font-bold text-[#5A7ACD]">
-                      <Link
-                        href={`/contacts/${contact.id}`}
-                        className="hover:text-[#FEB05D] transition-colors"
-                      >
-                        {contact.name}
-                      </Link>
-                    </td>
-                    <td className="px-8 py-5">
-                      <div className="flex justify-center">
-                        <span className="px-3 py-1 rounded-full bg-[#5A7ACD]/10 text-[#5A7ACD] text-[10px] font-black uppercase flex items-center gap-1.5">
-                          <Users size={10} /> {getClientLabel(contact.isClient)}
+                sortedContacts.map((contact) => (
+                  <tr
+                    key={contact.id}
+                    className="group transition-colors hover:bg-[#5A7ACD]/5 dark:hover:bg-[#5A7ACD]/10"
+                  >
+                    <td className="px-3 py-4 sm:px-6">
+                      <div className="flex items-center gap-3">
+                        <span
+                          aria-hidden="true"
+                          className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#5A7ACD]/10 text-xs font-bold text-[#334E9E] dark:bg-[#5A7ACD]/20 dark:text-[#B8C8F5] sm:flex"
+                        >
+                          {getInitials(contact.name)}
                         </span>
+                        <div className="min-w-0">
+                          <Link
+                            href={`/contacts/${contact.id}`}
+                            className={`block max-w-[120px] truncate font-semibold text-[#2B2A2A] transition-colors hover:text-[#334E9E] hover:underline underline-offset-2 dark:text-[#F5F2F2] dark:hover:text-[#B8C8F5] sm:max-w-[280px] ${focusRing}`}
+                          >
+                            {contact.name}
+                          </Link>
+                          <span className="block truncate text-xs text-[#2B2A2A]/70 dark:text-[#F5F2F2]/70 md:hidden">
+                            {contact.contactType}
+                          </span>
+                        </div>
                       </div>
                     </td>
-                    <td className="px-8 py-5 opacity-70">{contact.phoneNumber || "-"}</td>
-                    <td className="px-8 py-5 opacity-70 italic">{contact.email || "-"}</td>
-                    <td className="px-8 py-5 text-right opacity-70">{contact.address || "-"}</td>
-                    <td className="px-8 py-5 text-right text-xs font-medium opacity-60 group-hover:opacity-100">
+
+                    <td className="hidden px-6 py-4 md:table-cell">
+                      <span
+                        title={contact.contactType}
+                        className="inline-block max-w-[170px] truncate rounded-md bg-[#2B2A2A]/5 px-2 py-1 text-xs font-medium text-[#2B2A2A]/70 dark:bg-[#F5F2F2]/5 dark:text-[#F5F2F2]/70"
+                      >
+                        {contact.contactType || "-"}
+                      </span>
+                    </td>
+
+                    <td className="px-3 py-4 sm:px-6">
+                      <StatusBadge status={contact.isClient} />
+                    </td>
+
+                    <td className="hidden px-6 py-4 lg:table-cell">
+                      {contact.phoneNumber ? (
+                        <a
+                          href={`tel:${contact.phoneNumber.replace(/\s+/g, "")}`}
+                          className={`whitespace-nowrap text-[#2B2A2A]/70 transition-colors hover:text-[#334E9E] dark:text-[#F5F2F2]/70 dark:hover:text-[#B8C8F5] ${focusRing}`}
+                        >
+                          {contact.phoneNumber}
+                        </a>
+                      ) : (
+                        <span className="text-[#2B2A2A]/70 dark:text-[#F5F2F2]/70">
+                          -
+                        </span>
+                      )}
+                    </td>
+
+                    <td className="hidden px-6 py-4 xl:table-cell">
+                      {contact.email ? (
+                        <a
+                          href={`mailto:${contact.email}`}
+                          title={contact.email}
+                          className={`block max-w-[200px] truncate text-[#2B2A2A]/70 transition-colors hover:text-[#334E9E] dark:text-[#F5F2F2]/70 dark:hover:text-[#B8C8F5] ${focusRing}`}
+                        >
+                          {contact.email}
+                        </a>
+                      ) : (
+                        <span className="text-[#2B2A2A]/70 dark:text-[#F5F2F2]/70">
+                          -
+                        </span>
+                      )}
+                    </td>
+
+                    <td className="hidden px-6 py-4 2xl:table-cell">
+                      <span
+                        title={contact.address ?? undefined}
+                        className="block max-w-[200px] truncate text-[#2B2A2A]/70 dark:text-[#F5F2F2]/70"
+                      >
+                        {contact.address || "-"}
+                      </span>
+                    </td>
+
+                    <td className="hidden whitespace-nowrap px-6 py-4 text-right text-xs text-[#2B2A2A]/70 dark:text-[#F5F2F2]/70 sm:table-cell">
                       {formatContactDate(contact.createdAt)}
+                    </td>
+
+                    <td className="px-4 py-4 text-right sm:px-6">
+                      <Link
+                        href={`/contacts/${contact.id}`}
+                        aria-label={`View ${contact.name}`}
+                        className={`inline-flex h-11 min-w-11 items-center justify-center gap-1.5 rounded-lg border border-[#2B2A2A]/10 px-2.5 text-xs font-semibold text-[#2B2A2A]/70 transition-colors hover:border-[#5A7ACD]/30 hover:bg-[#5A7ACD]/5 hover:text-[#334E9E] dark:border-[#F5F2F2]/10 dark:text-[#F5F2F2]/70 dark:hover:bg-[#5A7ACD]/10 dark:hover:text-[#B8C8F5] lg:px-3 ${focusRing}`}
+                      >
+                        <Eye size={14} aria-hidden="true" />
+                        <span className="hidden lg:inline">View</span>
+                      </Link>
                     </td>
                   </tr>
                 ))
@@ -232,616 +539,12 @@ export default function ContactsPage() {
         </div>
       </div>
 
-      {/* Modal */}
       {isOpen && (
         <AddContactModal
           onClose={() => setIsOpen(false)}
           onCreated={refreshContacts}
         />
       )}
-    </div>
-  );
-}
-
-function AddContactModal({
-  onClose,
-  onCreated,
-}: {
-  onClose: () => void;
-  onCreated: () => Promise<void> | void;
-}) {
-  const [contactType, setContactType] = useState('Client'); // Client / Non Client
-  const [entityType, setEntityType] = useState('Personal'); // Personal / Limited Liability, etc
-  const [isSaving, setIsSaving] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [form, setForm] = useState({
-    name: "",
-    email: "",
-    phoneNumber: "",
-    address: "",
-    additionalInfo: "",
-    personalData: {
-      citizenship: "",
-      identificationNo: "",
-      office_position: "",
-      gender: "",
-      birthDate: "",
-      religion: "",
-    },
-    businessData: {
-      businessType: "",
-      taxCode: "",
-      commissioners: "",
-      directors: "",
-      shareholders: "",
-      lawyers: "",
-    },
-    organizationData: {
-      structureType: "Foundation",
-      taxCode: "",
-      maintainers: "",
-      mentors: "",
-      supervisors: "",
-      members: "",
-      lawyers: "",
-    },
-  });
-
-  const isPersonal = entityType === "Personal";
-  const isOrganization = ORGANIZATION_TYPES.has(entityType);
-  const isBusiness = !isPersonal && !isOrganization;
-
-  const handleEntityChange = (value: string) => {
-    setEntityType(value);
-    if (ORGANIZATION_TYPES.has(value)) {
-      setForm((prev) => ({
-        ...prev,
-        organizationData: {
-          ...prev.organizationData,
-          structureType: value,
-        },
-      }));
-    }
-  };
-
-  const updateField = (field: keyof typeof form, value: string) => {
-    setForm((prev) => ({ ...prev, [field]: value }));
-  };
-
-  const updateNestedField = (
-    section: "personalData" | "businessData" | "organizationData",
-    field: string,
-    value: string,
-  ) => {
-    setForm((prev) => ({
-      ...prev,
-      [section]: {
-        ...prev[section],
-        [field]: value,
-      },
-    }));
-  };
-
-  const handleSave = async () => {
-    setErrorMessage(null);
-
-    const name = normalizeValue(form.name);
-    if (!name) {
-      setErrorMessage("Name wajib diisi.");
-      return;
-    }
-
-    setIsSaving(true);
-
-    try {
-      const payload = {
-        isClient: contactType === "Client" ? "CLIENT" : "NON_CLIENT",
-        contactType: entityType,
-        name,
-        email: normalizeValue(form.email),
-        phoneNumber: normalizeValue(form.phoneNumber),
-        address: normalizeValue(form.address),
-        additionalInfo: normalizeValue(form.additionalInfo),
-        creator: getCreatorValue(),
-        personalData: undefined as undefined | {
-          citizenship?: string;
-          identificationNo?: string;
-          office_position?: string;
-          gender?: string;
-          birthDate?: string;
-          religion?: string;
-        },
-        businessData: undefined as undefined | {
-          businessType?: string;
-          taxCode?: string;
-          commissioners?: string;
-          directors?: string;
-          shareholders?: string;
-          lawyers?: string;
-        },
-        organizationData: undefined as undefined | {
-          structureType?: string;
-          taxCode?: string;
-          maintainers?: string;
-          mentors?: string;
-          supervisors?: string;
-          members?: string;
-          lawyers?: string;
-        },
-      };
-
-      if (isPersonal) {
-        payload.personalData = {
-          citizenship: normalizeValue(form.personalData.citizenship),
-          identificationNo: normalizeValue(form.personalData.identificationNo),
-          office_position: normalizeValue(form.personalData.office_position),
-          gender: normalizeValue(form.personalData.gender),
-          birthDate: form.personalData.birthDate || undefined,
-          religion: normalizeValue(form.personalData.religion),
-        };
-      } else if (isOrganization) {
-        payload.organizationData = {
-          structureType:
-            normalizeValue(form.organizationData.structureType) ?? entityType,
-          taxCode: normalizeValue(form.organizationData.taxCode),
-          maintainers: normalizeValue(form.organizationData.maintainers),
-          mentors: normalizeValue(form.organizationData.mentors),
-          supervisors: normalizeValue(form.organizationData.supervisors),
-          members: normalizeValue(form.organizationData.members),
-          lawyers: normalizeValue(form.organizationData.lawyers),
-        };
-      } else {
-        payload.businessData = {
-          businessType: normalizeValue(form.businessData.businessType),
-          taxCode: normalizeValue(form.businessData.taxCode),
-          commissioners: normalizeValue(form.businessData.commissioners),
-          directors: normalizeValue(form.businessData.directors),
-          shareholders: normalizeValue(form.businessData.shareholders),
-          lawyers: normalizeValue(form.businessData.lawyers),
-        };
-      }
-
-      await contactService.create(payload);
-      await onCreated();
-      onClose();
-    } catch (error) {
-      setErrorMessage("Gagal menyimpan kontak. Coba lagi.");
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  // Style helper untuk input agar kodingan lebih bersih
-  const inputStyle = "w-full bg-black/20 border-2 border-[#5A7ACD]/20 rounded-2xl px-5 py-3.5 text-sm text-[#5A7ACD] outline-none focus:border-[#5A7ACD] transition-all placeholder:opacity-30";
-  const labelStyle = "text-[10px] font-black uppercase tracking-[0.2em] text-[#5A7ACD] ml-2 mb-1 block";
-
-  return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#2B2A2A]/80 backdrop-blur-md p-4 animate-in fade-in duration-300">
-      <div className=" bg-[#F5F2F2] dark:bg-[#2B2A2A] text-[#2B2A2A] dark:text-[#F5F2F2] w-full max-w-2xl rounded-[2.5rem] border border-[#5A7ACD]/30 flex flex-col max-h-[90vh] shadow-[0_35px_60px_-15px_rgba(90,122,205,0.3)] animate-in zoom-in-95 duration-200 overflow-hidden">
-        
-        {/* Header */}
-        <div className="p-8 border-b border-[#5A7ACD]/20 flex justify-between items-center bg-black/10">
-          <div className="flex items-center  gap-4">
-            <div className="p-3 bg-[#5A7ACD] rounded-2xl text-[#F5F2F2]">
-              <Users size={24} />
-            </div>
-            <h2 className="text-2xl font-black  uppercase tracking-tight">Add Contact</h2>
-          </div>
-          <button onClick={onClose} className="p-2 hover:bg-[#FEB05D] hover:text-[#2B2A2A] rounded-full transition-all">
-            <X size={28} />
-          </button>
-        </div>
-
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto p-8 space-y-10 custom-scrollbar">
-          
-          {/* Top Section: Photo & Client Toggle */}
-          <section className="flex flex-col items-center gap-8">
-            <div className="relative group">
-              <div className="w-40 h-40 rounded-[3rem] border-4 border-[#5A7ACD]/30 bg-black/20 flex items-center justify-center overflow-hidden transition-all group-hover:border-[#FEB05D]">
-                <Users size={80} className="text-[#5A7ACD]/20 group-hover:text-[#FEB05D]/50" />
-              </div>
-              <button className="absolute -bottom-2 -right-2 p-3 bg-[#5A7ACD] hover:bg-[#FEB05D] rounded-2xl text-white shadow-xl border-4 border-[#2B2A2A] transition-all">
-                <Camera size={20} />
-              </button>
-            </div>
-            
-            <div className="w-full space-y-6">
-              {/* Toggle Client / Non Client */}
-              <div className="flex bg-black/20 p-2 rounded-2xl border border-[#5A7ACD]/20 w-fit mx-auto">
-                {['Client', 'Non Client'].map((type) => (
-                  <button
-                    key={type}
-                    onClick={() => setContactType(type)}
-                    className={`px-8 py-2.5 rounded-xl text-xs font-black uppercase transition-all ${
-                      contactType === type 
-                      ? 'bg-[#5A7ACD] text-[#F5F2F2] shadow-lg' 
-                      : 'opacity-40 hover:opacity-100'
-                    }`}
-                  >
-                    {type}
-                  </button>
-                ))}
-              </div>
-              
-              {/* Entity Type Dropdown */}
-              <div className="space-y-3">
-                <label className={labelStyle}>Contact Type</label>
-                <div className="relative">
-                  <select 
-                    value={entityType}
-                    onChange={(e) => handleEntityChange(e.target.value)}
-                    className="w-full bg-black/20 border-2 border-[#5A7ACD]/20 rounded-2xl px-5 py-4 text-sm appearance-none outline-none focus:border-[#5A7ACD] transition-all"
-                  >
-                    {ENTITY_OPTIONS.map((option) => (
-                      <option key={option} value={option}>
-                        {option}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown className="absolute right-5 top-1/2 -translate-y-1/2 text-[#5A7ACD]" size={20} />
-                </div>
-              </div>
-            </div>
-          </section>
-
-          {/* Dinamis Form Berdasarkan Entity Type */}
-          <section className="space-y-6 pt-8 border-t border-[#5A7ACD]/10">
-            <h3 className="font-black text-lg uppercase tracking-tight border-l-4 border-[#5A7ACD] pl-4">Contact Detail</h3>
-            
-            <div className="grid grid-cols-1 gap-4">
-              <div>
-                <label className={labelStyle}>Name</label>
-                <input
-                  type="text"
-                  placeholder="Enter name"
-                  value={form.name}
-                  onChange={(e) => updateField("name", e.target.value)}
-                  className={inputStyle}
-                />
-              </div>
-
-              {entityType === 'Personal' ? (
-                /* VIEW PERSONAL */
-                <>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                        <label className={labelStyle}>Citizenship</label>
-                        <input
-                          type="text"
-                          placeholder="Citizenship"
-                          value={form.personalData.citizenship}
-                          onChange={(e) =>
-                            updateNestedField("personalData", "citizenship", e.target.value)
-                          }
-                          className={inputStyle}
-                        />
-                    </div>
-                    <div>
-                        <label className={labelStyle}>ID Number</label>
-                        <input
-                          type="text"
-                          placeholder="Identification Number"
-                          value={form.personalData.identificationNo}
-                          onChange={(e) =>
-                            updateNestedField(
-                              "personalData",
-                              "identificationNo",
-                              e.target.value,
-                            )
-                          }
-                          className={inputStyle}
-                        />
-                    </div>
-                  </div>
-                  <div>
-                    <label className={labelStyle}>Position</label>
-                    <input
-                      type="text"
-                      placeholder="Position"
-                      value={form.personalData.office_position}
-                      onChange={(e) =>
-                        updateNestedField("personalData", "office_position", e.target.value)
-                      }
-                      className={inputStyle}
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <select
-                      className={inputStyle}
-                      value={form.personalData.gender}
-                      onChange={(e) =>
-                        updateNestedField("personalData", "gender", e.target.value)
-                      }
-                    >
-                      <option value="">Gender</option>
-                      {GENDER_OPTIONS.map((gender) => (
-                        <option key={gender} value={gender}>
-                          {gender}
-                        </option>
-                      ))}
-                    </select>
-                    <input
-                      type="date"
-                      value={form.personalData.birthDate}
-                      onChange={(e) =>
-                        updateNestedField("personalData", "birthDate", e.target.value)
-                      }
-                      className={inputStyle}
-                    />
-                  </div>
-                  <select
-                    className={inputStyle}
-                    value={form.personalData.religion}
-                    onChange={(e) =>
-                      updateNestedField("personalData", "religion", e.target.value)
-                    }
-                  >
-                    <option value="">Religion</option>
-                    {RELIGION_OPTIONS.map((religion) => (
-                      <option key={religion} value={religion}>
-                        {religion}
-                      </option>
-                    ))}
-                  </select>
-                  
-                  <div className="mt-4">
-                    <label className={labelStyle}>Personal Document</label>
-                    <div className="group border-2 border-dashed border-[#5A7ACD]/30 hover:border-[#FEB05D] rounded-3xl p-8 flex flex-col items-center justify-center gap-2 cursor-pointer transition-all bg-black/5">
-                      <Upload className="text-[#5A7ACD] group-hover:text-[#FEB05D]" size={32} />
-                      <p className="text-sm font-bold opacity-60">Select or drag and drop your files here</p>
-                      <p className="text-[10px] opacity-40">(Up to 5GB)</p>
-                    </div>
-                  </div>
-                </>
-              ) : (
-                isOrganization ? (
-                  /* VIEW ORGANIZATION */
-                  <>
-                    <div className="grid grid-cols-2 gap-4">
-                      <input
-                        type="text"
-                        placeholder="Structure Type"
-                        value={form.organizationData.structureType}
-                        onChange={(e) =>
-                          updateNestedField(
-                            "organizationData",
-                            "structureType",
-                            e.target.value,
-                          )
-                        }
-                        className={inputStyle}
-                      />
-                      <input
-                        type="text"
-                        placeholder="Tax Code"
-                        value={form.organizationData.taxCode}
-                        onChange={(e) =>
-                          updateNestedField("organizationData", "taxCode", e.target.value)
-                        }
-                        className={inputStyle}
-                      />
-                    </div>
-                    <input
-                      type="text"
-                      placeholder="Maintainers"
-                      value={form.organizationData.maintainers}
-                      onChange={(e) =>
-                        updateNestedField("organizationData", "maintainers", e.target.value)
-                      }
-                      className={inputStyle}
-                    />
-                    <input
-                      type="text"
-                      placeholder="Mentors"
-                      value={form.organizationData.mentors}
-                      onChange={(e) =>
-                        updateNestedField("organizationData", "mentors", e.target.value)
-                      }
-                      className={inputStyle}
-                    />
-                    <input
-                      type="text"
-                      placeholder="Supervisors"
-                      value={form.organizationData.supervisors}
-                      onChange={(e) =>
-                        updateNestedField("organizationData", "supervisors", e.target.value)
-                      }
-                      className={inputStyle}
-                    />
-                    <input
-                      type="text"
-                      placeholder="Members"
-                      value={form.organizationData.members}
-                      onChange={(e) =>
-                        updateNestedField("organizationData", "members", e.target.value)
-                      }
-                      className={inputStyle}
-                    />
-                    <input
-                      type="text"
-                      placeholder="Lawyers"
-                      value={form.organizationData.lawyers}
-                      onChange={(e) =>
-                        updateNestedField("organizationData", "lawyers", e.target.value)
-                      }
-                      className={inputStyle}
-                    />
-
-                    <div className="mt-4">
-                      <label className={labelStyle}>Organization Document</label>
-                      <div className="group border-2 border-dashed border-[#5A7ACD]/30 hover:border-[#FEB05D] rounded-3xl p-8 flex flex-col items-center justify-center gap-2 cursor-pointer transition-all bg-black/5">
-                        <Upload className="text-[#5A7ACD] group-hover:text-[#FEB05D]" size={32} />
-                        <p className="text-sm font-bold opacity-60">Select or drag and drop your files here</p>
-                        <p className="text-[10px] opacity-40">(Up to 5GB)</p>
-                      </div>
-                    </div>
-                  </>
-                ) : (
-                  /* VIEW COMPANY */
-                  <>
-                    <div className="grid grid-cols-2 gap-4">
-                      <input
-                        type="text"
-                        placeholder="Business Type"
-                        value={form.businessData.businessType}
-                        onChange={(e) =>
-                          updateNestedField("businessData", "businessType", e.target.value)
-                        }
-                        className={inputStyle}
-                      />
-                      <input
-                        type="text"
-                        placeholder="Tax Code"
-                        value={form.businessData.taxCode}
-                        onChange={(e) =>
-                          updateNestedField("businessData", "taxCode", e.target.value)
-                        }
-                        className={inputStyle}
-                      />
-                    </div>
-                    <input
-                      type="text"
-                      placeholder="Commissioners"
-                      value={form.businessData.commissioners}
-                      onChange={(e) =>
-                        updateNestedField(
-                          "businessData",
-                          "commissioners",
-                          e.target.value,
-                        )
-                      }
-                      className={inputStyle}
-                    />
-                    <input
-                      type="text"
-                      placeholder="Directors"
-                      value={form.businessData.directors}
-                      onChange={(e) =>
-                        updateNestedField("businessData", "directors", e.target.value)
-                      }
-                      className={inputStyle}
-                    />
-                    <input
-                      type="text"
-                      placeholder="Shareholders"
-                      value={form.businessData.shareholders}
-                      onChange={(e) =>
-                        updateNestedField("businessData", "shareholders", e.target.value)
-                      }
-                      className={inputStyle}
-                    />
-                    <input
-                      type="text"
-                      placeholder="Lawyers"
-                      value={form.businessData.lawyers}
-                      onChange={(e) =>
-                        updateNestedField("businessData", "lawyers", e.target.value)
-                      }
-                      className={inputStyle}
-                    />
-
-                    <div className="mt-4">
-                      <label className={labelStyle}>Company Document</label>
-                      <div className="group border-2 border-dashed border-[#5A7ACD]/30 hover:border-[#FEB05D] rounded-3xl p-8 flex flex-col items-center justify-center gap-2 cursor-pointer transition-all bg-black/5">
-                        <Upload className="text-[#5A7ACD] group-hover:text-[#FEB05D]" size={32} />
-                        <p className="text-sm font-bold opacity-60">Select or drag and drop your files here</p>
-                        <p className="text-[10px] opacity-40">(Up to 5GB)</p>
-                      </div>
-                    </div>
-                  </>
-                )
-              )}
-            </div>
-          </section>
-
-          {/* Section: Contact Info, Address, dsb (Tetap Sama) */}
-          <section className="space-y-6 pt-8 border-t border-[#5A7ACD]/10">
-            <h3 className="font-black text-lg uppercase tracking-tight border-l-4 border-[#5A7ACD] pl-4">
-              Contact Information
-            </h3>
-            <div className="grid grid-cols-1 gap-4">
-              <div>
-                <label className={labelStyle}>Email</label>
-                <input
-                  type="email"
-                  placeholder="Email"
-                  value={form.email}
-                  onChange={(e) => updateField("email", e.target.value)}
-                  className={inputStyle}
-                />
-              </div>
-              <div>
-                <label className={labelStyle}>Phone Number</label>
-                <input
-                  type="text"
-                  placeholder="Phone Number"
-                  value={form.phoneNumber}
-                  onChange={(e) => updateField("phoneNumber", e.target.value)}
-                  className={inputStyle}
-                />
-              </div>
-            </div>
-          </section>
-
-          <section className="space-y-6 pt-8 border-t border-[#5A7ACD]/10">
-            <h3 className="font-black text-lg uppercase tracking-tight border-l-4 border-[#5A7ACD] pl-4">
-              Address Detail
-            </h3>
-            <div className="grid grid-cols-1 gap-4">
-              <div>
-                <label className={labelStyle}>Address</label>
-                <input
-                  type="text"
-                  placeholder="Address"
-                  value={form.address}
-                  onChange={(e) => updateField("address", e.target.value)}
-                  className={inputStyle}
-                />
-              </div>
-            </div>
-          </section>
-
-          <section className="space-y-6 pt-8 border-t border-[#5A7ACD]/10">
-            <h3 className="font-black text-lg uppercase tracking-tight border-l-4 border-[#5A7ACD] pl-4">
-              Additional Information
-            </h3>
-            <div className="grid grid-cols-1 gap-4">
-              <div>
-                <label className={labelStyle}>Notes</label>
-                <textarea
-                  placeholder="Additional info"
-                  value={form.additionalInfo}
-                  onChange={(e) => updateField("additionalInfo", e.target.value)}
-                  className={`${inputStyle} min-h-[120px]`}
-                />
-              </div>
-            </div>
-          </section>
-        </div>
-
-        {/* Footer */}
-        <div className="p-8 border-t border-[#5A7ACD]/20 bg-black/20 flex flex-col gap-4">
-          {errorMessage && (
-            <p className="text-xs text-red-500 font-semibold">{errorMessage}</p>
-          )}
-          <div className="flex gap-4">
-            <button 
-              onClick={onClose}
-              className="flex-1 py-4 rounded-2xl text-sm font-black uppercase border-2 border-[#5A7ACD] text-[#5A7ACD] hover:bg-[#5A7ACD] hover:text-[#F5F2F2] transition-all"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleSave}
-              disabled={isSaving}
-              className="flex-[2] bg-[#5A7ACD] hover:bg-[#FEB05D] py-4 rounded-2xl text-sm font-black uppercase text-[#F5F2F2] shadow-xl shadow-[#5A7ACD]/20 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
-            >
-              {isSaving ? "Saving..." : "Save Contact"}
-            </button>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }

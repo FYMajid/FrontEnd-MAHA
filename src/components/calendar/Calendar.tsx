@@ -221,7 +221,7 @@ const Calendar: React.FC = () => {
   };
 
   return (
-    <div className="calendar-fit flex h-[calc(100dvh-6rem-1px)] flex-col overflow-hidden rounded-2xl border border-[#5A7ACD]/20 bg-[#F5F2F2] dark:bg-[#2B2A2A] sm:p-4">
+    <div className="calendar-fit flex h-[calc(100dvh-6rem-1px)] bg-white flex-col overflow-hidden rounded-2xl border border-[#5A7ACD]/20 bg-[#F5F2F2] dark:bg-[#2B2A2A] sm:p-4">
       <FullCalendar
         plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
         initialView="dayGridMonth"
