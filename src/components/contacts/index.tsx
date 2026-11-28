@@ -442,7 +442,7 @@ export default function ContactsPage() {
                     key={contact.id}
                     className="group transition-colors hover:bg-[#5A7ACD]/5 dark:hover:bg-[#5A7ACD]/10"
                   >
-                    <td className="px-3 py-4 sm:px-6">
+                    <td className="py-4 sm:px-6">
                       <div className="flex items-center gap-3">
                         <span
                           aria-hidden="true"
@@ -464,7 +464,7 @@ export default function ContactsPage() {
                       </div>
                     </td>
 
-                    <td className="hidden px-6 py-4 md:table-cell">
+                    <td className="hidden py-4 md:table-cell">
                       <span
                         title={contact.contactType}
                         className="inline-block max-w-[170px] truncate rounded-md bg-[#2B2A2A]/5 px-2 py-1 text-xs font-medium text-[#2B2A2A]/70 dark:bg-[#F5F2F2]/5 dark:text-[#F5F2F2]/70"
@@ -473,7 +473,7 @@ export default function ContactsPage() {
                       </span>
                     </td>
 
-                    <td className="px-3 py-4 sm:px-6">
+                    <td className="py-4 sm:px-6">
                       <StatusBadge status={contact.isClient} />
                     </td>
 
@@ -492,7 +492,7 @@ export default function ContactsPage() {
                       )}
                     </td>
 
-                    <td className="hidden px-6 py-4 xl:table-cell">
+                    <td className="hidden py-4 xl:table-cell">
                       {contact.email ? (
                         <a
                           href={`mailto:${contact.email}`}
@@ -508,7 +508,7 @@ export default function ContactsPage() {
                       )}
                     </td>
 
-                    <td className="hidden px-6 py-4 2xl:table-cell">
+                    <td className="hidden py-4 2xl:table-cell">
                       <span
                         title={contact.address ?? undefined}
                         className="block max-w-[200px] truncate text-[#2B2A2A]/70 dark:text-[#F5F2F2]/70"
@@ -519,17 +519,6 @@ export default function ContactsPage() {
 
                     <td className="hidden whitespace-nowrap px-6 py-4 text-right text-xs text-[#2B2A2A]/70 dark:text-[#F5F2F2]/70 sm:table-cell">
                       {formatContactDate(contact.createdAt)}
-                    </td>
-
-                    <td className="px-4 py-4 text-right sm:px-6">
-                      <Link
-                        href={`/contacts/${contact.id}`}
-                        aria-label={`View ${contact.name}`}
-                        className={`inline-flex h-11 min-w-11 items-center justify-center gap-1.5 rounded-lg border border-[#2B2A2A]/10 px-2.5 text-xs font-semibold text-[#2B2A2A]/70 transition-colors hover:border-[#5A7ACD]/30 hover:bg-[#5A7ACD]/5 hover:text-[#334E9E] dark:border-[#F5F2F2]/10 dark:text-[#F5F2F2]/70 dark:hover:bg-[#5A7ACD]/10 dark:hover:text-[#B8C8F5] lg:px-3 ${focusRing}`}
-                      >
-                        <Eye size={14} aria-hidden="true" />
-                        <span className="hidden lg:inline">View</span>
-                      </Link>
                     </td>
                   </tr>
                 ))
